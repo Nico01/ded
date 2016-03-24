@@ -56,6 +56,19 @@ static bool list_cmp_addr(list *node, uint64_t data)
     return false;
 }
 
+
+void list_free(list *node)
+{
+    list *tmp;
+
+    while (node) {
+        tmp = node;
+        node = node->next;
+        free(tmp);
+    }
+}
+
+
 MZ_Hdr *read_mz_header(FILE *fp)
 {
     MZ_Hdr *mz_hdr = malloc(sizeof(MZ_Hdr));

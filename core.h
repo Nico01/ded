@@ -49,5 +49,7 @@ list *search_jump(uint64_t addr, size_t size, uint8_t *buffer);
 void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, list *call, list *jump);
 void ls_disasm(uint64_t addr, size_t size, uint8_t *buffer);
 
+void list_free(list *node);
+
 #endif // CORE_H
 

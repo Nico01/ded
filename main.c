@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
 
     if (size == 0) {
         printf("%s: File size %zu\n", filename, size);
-        exit(EXIT_FAILURE);
+        goto end2;
     }
 
     uint8_t *buffer = malloc(size * sizeof(uint8_t));
@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
 
             if (mz_hdr == NULL) {
                 printf("%s: File format not recognized\n", filename);
-                exit(EXIT_FAILURE);
+                goto end;
             }
 
             disp_header(mz_hdr);
@@ -94,6 +94,9 @@ int main(int argc, char *argv[])
                        labl_addr);
                 proc_addr = proc_addr->next;
             }
+
+            list_free(proc_addr);
+            list_free(labl_addr);
         } else {
             list *proc_addr = search_call(0, size, buffer);
             list *labl_addr = search_jump(0, size, buffer);
@@ -102,6 +105,9 @@ int main(int argc, char *argv[])
                 rt_disasm(0, proc_addr->value, size, buffer, proc_addr, labl_addr);
                 proc_addr = proc_addr->next;
             }
+
+            list_free(proc_addr);
+            list_free(labl_addr);
         }
     } else {
         if (mz) {
@@ -109,7 +115,7 @@ int main(int argc, char *argv[])
 
             if (mz_hdr == NULL) {
                 printf("%s: File format not recognized\n", filename);
-                exit(EXIT_FAILURE);
+                goto end;
             }
 
             disp_header(mz_hdr);
@@ -120,8 +126,10 @@ int main(int argc, char *argv[])
         }
     }
 
-    fclose(fp);
+end:
     free(buffer);
+end2:
+    fclose(fp);    
 
     return 0;
 }

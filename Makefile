@@ -1,4 +1,4 @@
-CFLAGS = -Wall -Wextra -pedantic
+CFLAGS = -Wall -Wextra -pedantic -ggdb3
 LIBNAME = capstone
 
 all: ded

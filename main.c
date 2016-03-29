@@ -90,8 +90,8 @@ int main(int argc, char *argv[])
             list *labl_addr = search_jump(get_entry(mz_hdr), get_exe_size(mz_hdr), buffer);
 
             while (proc_addr) {
-                rt_disasm(get_entry(mz_hdr), proc_addr->value, get_exe_size(mz_hdr), buffer, proc_addr,
-                       labl_addr);
+                if (!proc_addr->visited)
+                    rt_disasm(get_entry(mz_hdr), proc_addr->value, get_exe_size(mz_hdr), buffer, proc_addr, labl_addr);
                 proc_addr = proc_addr->next;
             }
 
@@ -102,7 +102,8 @@ int main(int argc, char *argv[])
             list *labl_addr = search_jump(0, size, buffer);
 
             while (proc_addr) {
-                rt_disasm(0, proc_addr->value, size, buffer, proc_addr, labl_addr);
+                if (!proc_addr->visited)
+                    rt_disasm(0, proc_addr->value, size, buffer, proc_addr, labl_addr);
                 proc_addr = proc_addr->next;
             }
 

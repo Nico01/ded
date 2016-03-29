@@ -34,6 +34,7 @@ typedef struct {
 
 typedef struct node {
 	uint64_t value;
+	bool visited;
 	struct node *next;
 } list;
 

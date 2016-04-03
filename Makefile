@@ -1,10 +1,10 @@
 CFLAGS = -Wall -Wextra -pedantic -ggdb3
-LIBNAME = capstone
+LDFLAGS = -lcapstone
 
 all: ded
 
 ded: main.o core.o
-	${CC} ${CFLAGS} $^ -l$(LIBNAME) -o $@
+	${CC} ${CFLAGS} $^ -o $@ ${LDFLAGS}
 
 %.o: %.c
 	${CC} ${CFLAGS} -c $^ -o $@

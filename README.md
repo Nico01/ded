@@ -4,8 +4,9 @@ DOS Executable disassembler
 ```
 Usage: ded <option> -f <file>
 Options:
-    -h    display this information
+    -H    display this information
     -e    disassemble DOS MZ 16 bits executable
+    -h    if -e display the DOS MZ header
     -r    disassemble file using recursive traversal algorithm (experimental)
     -f    input file
 

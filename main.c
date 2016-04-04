@@ -8,6 +8,8 @@ typedef struct {
     bool mz;
     bool recursive;
     bool hdr;
+    bool entry;
+    uint64_t ep;
 } Options;
 
 static uint8_t rtd(FILE *fp, size_t size, uint8_t *buffer, Options opts);
@@ -19,9 +21,10 @@ static void usage(char *filename)
             "\nUsage: %s <option> -f <file>\n"
             "\n\tOptions:\n"
             "\n\t-H    display this information\n"
-            "\n\t-e    disassemble DOS MZ 16 bits executable\n"
-            "\n\t-h    if -e display the DOS MZ header\n"
+            "\n\t-m    disassemble DOS MZ 16 bits executable\n"
+            "\n\t-h    if -m display the DOS MZ header\n"
             "\n\t-r    disassemble file using recursive traversal algorithm (experimental)\n"
+            "\n\t-s    specifies an entry point\n\n"
             "\n\t-f    input file\n\n"
             "\n\tNote:"
             "\n\tif no flags are given the input file is treated as a headerless 16 bits\n"
@@ -36,18 +39,18 @@ int main(int argc, char *argv[])
     FILE *fp;
     int c;
 
-    Options opts = (Options){.filename = NULL, .recursive = false, .mz = false };
+    Options opts = (Options){.filename = NULL, .recursive = false, .mz = false, .entry = false };
 
     if (argc < 2) {
         usage(argv[0]);
     }
 
-    while ((c = getopt(argc, argv, "Hehrf:")) != -1) {
+    while ((c = getopt(argc, argv, "Hmhrs:f:")) != -1) {
         switch (c) {
         case 'H':
             usage(argv[0]);
             break;
-        case 'e':
+        case 'm':
             opts.mz = true;
             break;
         case 'h':
@@ -55,6 +58,10 @@ int main(int argc, char *argv[])
             break;
         case 'r':
             opts.recursive = true;
+            break;
+        case 's':
+            opts.entry = true;
+            opts.ep = strtol(optarg, NULL, 16);
             break;
         case 'f':
             opts.filename = optarg;
@@ -106,6 +113,8 @@ end2:
 
 static uint8_t rtd(FILE *fp, size_t size, uint8_t *buffer, Options opts)
 {
+    uint64_t exe_entry;
+
     if (opts.mz) {
         MZ_Hdr *mz_hdr = read_mz_header(fp);
 
@@ -114,7 +123,10 @@ static uint8_t rtd(FILE *fp, size_t size, uint8_t *buffer, Options opts)
             return 1;
         }
 
-        uint64_t exe_entry = get_entry(mz_hdr);
+        if (opts.entry)
+            exe_entry = opts.ep;
+        else
+            exe_entry = get_entry(mz_hdr);
 
         if (exe_entry > size)
             exe_entry = 0x1c;
@@ -135,12 +147,17 @@ static uint8_t rtd(FILE *fp, size_t size, uint8_t *buffer, Options opts)
         list_free(proc_addr);
         list_free(labl_addr);
     } else {
-        list *proc_addr = search_addr(0, size, buffer, CALL_ADDR);
-        list *labl_addr = search_addr(0, size, buffer, JUMP_ADDR);
+        if (opts.entry)
+            exe_entry = opts.ep;
+        else
+            exe_entry = 0;
+
+        list *proc_addr = search_addr(exe_entry, size, buffer, CALL_ADDR);
+        list *labl_addr = search_addr(exe_entry, size, buffer, JUMP_ADDR);
 
         while (proc_addr) {
             if (!proc_addr->visited && proc_addr->value < size)
-                rt_disasm(0, proc_addr->value, size, buffer, proc_addr, labl_addr);
+                rt_disasm(exe_entry, proc_addr->value, size, buffer, proc_addr, labl_addr);
             proc_addr = proc_addr->next;
         }
 
@@ -153,6 +170,8 @@ static uint8_t rtd(FILE *fp, size_t size, uint8_t *buffer, Options opts)
 
 static uint8_t lsd(FILE *fp, size_t size, uint8_t *buffer, Options opts)
 {
+    uint64_t exe_entry;
+
     if (opts.mz) {
         MZ_Hdr *mz_hdr = read_mz_header(fp);
 
@@ -161,7 +180,10 @@ static uint8_t lsd(FILE *fp, size_t size, uint8_t *buffer, Options opts)
             return 1;
         }
 
-        uint64_t exe_entry = get_entry(mz_hdr);
+        if (opts.entry)
+            exe_entry = opts.ep;
+        else
+            exe_entry = get_entry(mz_hdr);
 
         if (exe_entry > size)
             exe_entry = 0x1c;
@@ -172,7 +194,12 @@ static uint8_t lsd(FILE *fp, size_t size, uint8_t *buffer, Options opts)
         ls_disasm(exe_entry, get_exe_size(mz_hdr), buffer);
 
     } else {
-        ls_disasm(0, size, buffer);
+        if (opts.entry)
+            exe_entry = opts.ep;
+        else
+            exe_entry = 0;
+
+        ls_disasm(exe_entry, size, buffer);
     }
 
     return 0;

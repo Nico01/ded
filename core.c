@@ -115,6 +115,38 @@ char *int21h[] = {
     "Extended open file"                            // 0x6c
 };
 
+/*
+char *int10h[] = {
+    [0x00] = "Set video mode",                                        // 0x00
+    [0x01] = "Set cursor type",                                       // 0x01
+    [0x02] = "Set cursor position",                                   // 0x02
+    [0x03] = "Read cursor position",                                  // 0x03
+    [0x04] = "Read light pen",                                        // 0x04
+    [0x05] = "Select active display page",                            // 0x05
+    [0x06] = "Scroll active page up",                                 // 0x06
+    [0x07] = "Scroll active page down",                               // 0x07
+    [0x08] = "Read character and attribute at cursor",                // 0x08
+    [0x09] = "Write character and attribute at cursor",               // 0x09
+    [0x0a] = "Write character at current cursor",                     // 0x0a
+    [0x0b] = "Set color palette",                                     // 0x0b
+    [0x0c] = "Write graphics pixel at coordinate",                    // 0x0c
+    [0x0d] = "Read graphics pixel at coordinate",                     // 0x0d
+    [0x0e] = "Write text in teletype mode",                           // 0x0e
+    [0x0f] = "Get current video state",                               // 0x0f
+    [0x10] = "Set/get palette registers (EGA/VGA)",                   // 0x10
+    [0x11] = "Character generator routine (EGA/VGA)",                 // 0x11
+    [0x12] = "Video subsystem configuration (EGA/VGA)",               // 0x12
+    [0x13] = "Write string",                                          // 0x13
+    [0x14] = "Load LCD char font (convertible)",                      // 0x14
+    [0x15] = "Return physical display parms (convertible)",           // 0x15
+    [0x1a] = "Video Display Combination (VGA)",                       // 0x1a
+    [0x1b] = "Video BIOS Functionality/State Information (MCGA/VGA)", // 0x1b
+    [0x1c] = "Save/Restore Video State  (VGA only)",                  // 0x1c
+    [0xfe] = "Get DESQView/TopView Virtual Screen Regen Buffer",      // 0xfe
+    [0xff] = "Update DESQView/TopView Virtual Screen Regen Buffer"    // 0xff
+};
+*/
+
 static list *list_init(uint64_t data, bool is_proc)
 {
     list *l = malloc(sizeof(list));
@@ -243,7 +275,7 @@ size_t get_exe_size(MZ_Hdr *mz_hdr)
     return size;
 }
 
-char *get_opcodes(cs_insn insn)
+static char *get_opcodes(cs_insn insn)
 {
     uint8_t len = (2 * insn.size) + 1;
     char opstr[32];
@@ -259,7 +291,7 @@ char *get_opcodes(cs_insn insn)
     return opcodes;
 }
 
-uint8_t get_reg_ah(cs_insn insn)
+static uint8_t get_reg_ah(cs_insn insn)
 {
     cs_detail *detail = insn.detail;
     uint8_t reg_ah = 0xff;
@@ -279,26 +311,32 @@ uint8_t get_reg_ah(cs_insn insn)
     return reg_ah;
 }
 
-bool is_int21h(cs_insn insn)
+static void print_comment(cs_insn insn, char *opcodes, uint8_t r_ah)
 {
     cs_detail *detail = insn.detail;
 
-    if (detail->x86.operands[0].imm == 0x21) {
-        return true;
+    switch (detail->x86.operands[0].imm) {
+    case 0x21:
+        if (r_ah != 0xff) {
+            printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn.address, opcodes,
+                   insn.mnemonic, insn.op_str, int21h[r_ah]);
+            free(opcodes);
+
+            if (r_ah == 0x4c)
+                printf("========\n");
+        }
+        break;
+    case 0x20:
+        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; exit()\n", insn.address, opcodes,
+               insn.mnemonic, insn.op_str);
+        printf("========\n");
+        free(opcodes);
+        break;
+    default:
+        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes, insn.mnemonic,
+               insn.op_str);
+        free(opcodes);
     }
-
-    return false;
-}
-
-bool is_int20h(cs_insn insn)
-{
-    cs_detail *detail = insn.detail;
-
-    if (detail->x86.operands[0].imm == 0x20) {
-        return true;
-    }
-
-    return false;
 }
 
 list *search_addr(uint64_t addr, size_t size, uint8_t *buffer, addr_type mode)
@@ -402,26 +440,12 @@ void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, list
                 if (get_reg_ah(*insn) != 0xff)
                     r_ah = get_reg_ah(*insn);
 
-                if (insn->id == X86_INS_INT && is_int21h(*insn) && r_ah != 0xff) {
-                    printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn->address, opcodes,
-                           insn->mnemonic, insn->op_str, int21h[r_ah]);
-                    free(opcodes);
-
-                    if (r_ah == 0x4c)
-                        printf("========\n");
-
-                    check_jump(jump, addr);
-
-                    if (list_cmp_addr(call, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
-                        cs_insn_group(handle, insn, CS_GRP_IRET))
-                        goto end;
+                if (insn->id == X86_INS_INT) {
+                    print_comment(*insn, opcodes, r_ah);
                 } else {
                     printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn->address, opcodes,
                            insn->mnemonic, insn->op_str);
                     free(opcodes);
-
-                    if (is_int20h(*insn))
-                        printf("========\n");
 
                     check_jump(jump, addr);
 
@@ -444,16 +468,8 @@ void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, list
                 if (get_reg_ah(*insn) != 0xff)
                     r_ah = get_reg_ah(*insn);
 
-                if (insn->id == X86_INS_INT && is_int21h(*insn) && r_ah != 0xff) {
-                    printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn->address, opcodes,
-                           insn->mnemonic, insn->op_str, int21h[r_ah]);
-                    free(opcodes);
-
-                    check_jump(jump, addr);
-
-                    if (cs_insn_group(handle, insn, CS_GRP_RET) ||
-                        cs_insn_group(handle, insn, CS_GRP_IRET))
-                        goto end;
+                if (insn->id == X86_INS_INT) {
+                    print_comment(*insn, opcodes, r_ah);
                 } else {
                     printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn->address, opcodes,
                            insn->mnemonic, insn->op_str);

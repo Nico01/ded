@@ -264,7 +264,10 @@ void disp_header(MZ_Hdr *mz_hdr)
     printf("Overlay number                  0x%x\n\n", mz_hdr->overlay_number);
 }
 
-uint64_t get_entry(MZ_Hdr *mz_hdr) { return (mz_hdr->header_paragraphs * 16); }
+uint64_t get_entry(MZ_Hdr *mz_hdr)
+{
+    return ((mz_hdr->header_paragraphs + mz_hdr->cs) << 4) + mz_hdr->ip;
+}
 
 size_t get_exe_size(MZ_Hdr *mz_hdr)
 {

@@ -229,15 +229,15 @@ std::list<Address> search_addr(uint64_t addr, size_t size, uint8_t *buffer, Addr
 
     std::list<Address> l;
 
-    if (t != CALL_ADDR && t != JUMP_ADDR) {
+    if (t == Address_type::Undefined) {
         fprintf(stderr, "ERROR: Wrong Address_type argument\n");
         exit(EXIT_FAILURE);
     }
 
-    if (t == CALL_ADDR)
-        l.push_back(Address(addr, false, CALL_ADDR));
+    if (t == Address_type::Call)
+        l.push_back(Address(addr, false, Address_type::Call));
     else
-        l.push_back(Address(0, false, JUMP_ADDR));
+        l.push_back(Address(0, false, Address_type::Jump));
 
 
     if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
@@ -252,13 +252,13 @@ std::list<Address> search_addr(uint64_t addr, size_t size, uint8_t *buffer, Addr
         const uint8_t *code = &buffer[i + addr];
         insn = cs_malloc(handle);
 
-        if (t == CALL_ADDR) {
+        if (t == Address_type::Call) {
             while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
                 if (cs_insn_group(handle, insn, CS_GRP_CALL)) {
                     detail = insn->detail;
                     if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
                         if ((uint64_t)detail->x86.operands[0].imm < size)
-                            l.push_back(Address(detail->x86.operands[0].imm, false, CALL_ADDR));
+                            l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Call));
                 }
             }
         } else {
@@ -267,7 +267,7 @@ std::list<Address> search_addr(uint64_t addr, size_t size, uint8_t *buffer, Addr
                     detail = insn->detail;
                     if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
                         if ((uint64_t)detail->x86.operands[0].imm < size)
-                            l.push_back(Address(detail->x86.operands[0].imm, false, JUMP_ADDR));
+                            l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Jump));
                 }
             }
         }
@@ -290,7 +290,7 @@ static void check_jump(std::list<Address> l, uint64_t data)
             if (!i.visited) {
                 i.visited = true;
 
-                if (i.type == JUMP_ADDR)
+                if (i.type == Address_type::Jump)
                     printf("\nL_0x%lx:\n", data);
             }
         }

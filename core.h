@@ -5,7 +5,7 @@
 #include <list>
 
 
-enum Address_type { UNDEFINED_ADDR, CALL_ADDR, JUMP_ADDR };
+enum class Address_type { Undefined, Call, Jump };
 
 struct Address {
     uint64_t value;
@@ -15,10 +15,10 @@ struct Address {
     Address(){}
 
 	Address(const uint64_t a)
-		: value(a), visited(false), type(UNDEFINED_ADDR){}
+		: value(a), visited(false), type(Address_type::Undefined){}
 
 	Address(const uint64_t a, bool b)
-		: value(a), visited(b), type(UNDEFINED_ADDR){}
+		: value(a), visited(b), type(Address_type::Undefined){}
 
 	Address(const uint64_t a, bool b, Address_type t)
 		: value(a), visited(b), type(t){}

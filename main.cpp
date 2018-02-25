@@ -85,8 +85,8 @@ static int rtd(Options o, size_t size, uint8_t *buffer)
         if (o.hdr)
             mz.disp_header();
 
-        std::list<Address> proc_addr = search_addr(exe_entry, mz.get_exe_size(), buffer, CALL_ADDR);
-        std::list<Address> labl_addr = search_addr(exe_entry, mz.get_exe_size(), buffer, JUMP_ADDR);
+        std::list<Address> proc_addr = search_addr(exe_entry, mz.get_exe_size(), buffer, Address_type::Call);
+        std::list<Address> labl_addr = search_addr(exe_entry, mz.get_exe_size(), buffer, Address_type::Jump);
 
         for (auto& i : proc_addr) {
             if (!i.visited && i.value < size)
@@ -99,8 +99,8 @@ static int rtd(Options o, size_t size, uint8_t *buffer)
         else
             exe_entry = 0;
 
-        std::list<Address> proc_addr = search_addr(exe_entry, size, buffer, CALL_ADDR);
-        std::list<Address> labl_addr = search_addr(exe_entry, size, buffer, JUMP_ADDR);
+        std::list<Address> proc_addr = search_addr(exe_entry, size, buffer, Address_type::Call);
+        std::list<Address> labl_addr = search_addr(exe_entry, size, buffer, Address_type::Jump);
 
         for (auto& i : proc_addr) {
             if (!i.visited && i.value < size)

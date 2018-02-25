@@ -1,9 +1,12 @@
 #include "core.h"
 
+#include <list>
+#include <cstring>
+#include <cstdlib>
 #include <capstone/capstone.h>
-#include <inttypes.h>
+#include <cinttypes>
 
-char *int21h[] = {
+const char *int21h[] = {
     "Terminate process",                            // 0x00
     "Character input with echo",                    // 0x01
     "Character output",                             // 0x02
@@ -147,136 +150,7 @@ char *int10h[] = {
 };
 */
 
-static list *list_init(uint64_t data, bool is_proc)
-{
-    list *l = malloc(sizeof(list));
 
-    if (l != NULL) {
-        l->next = NULL;
-        l->value = data;
-        l->visited = false;
-        if (is_proc)
-            l->is_proc = true;
-    }
-
-    return l;
-}
-
-static void list_add(list *node, uint64_t data, bool is_proc)
-{
-    list *l = node;
-
-    while (l->next != NULL)
-        l = l->next;
-
-    l->next = list_init(data, is_proc);
-}
-
-static void list_remove_duplicates(list *node)
-{
-    list *c1, *c2, *dup;
-    c1 = node;
-
-    while (c1 != NULL && c1->next != NULL) {
-        c2 = c1;
-
-        while (c2->next != NULL) {
-            if (c1->value == c2->next->value) {
-                dup = c2->next;
-                c2->next = c2->next->next;
-                free(dup);
-            } else
-                c2 = c2->next;
-        }
-        c1 = c1->next;
-    }
-}
-
-static bool list_cmp_addr(list *node, uint64_t data)
-{
-    while (node) {
-        if (node->value == data)
-            return true;
-
-        node = node->next;
-    }
-    return false;
-}
-
-static list *get_node(list *node, uint64_t data)
-{
-    while (node) {
-        if (node->value == data)
-            return node;
-
-        node = node->next;
-    }
-    return NULL;
-}
-
-void list_free(list *node)
-{
-    list *tmp;
-
-    while (node) {
-        tmp = node;
-        node = node->next;
-        free(tmp);
-    }
-}
-
-MZ_Hdr *read_mz_header(FILE *fp)
-{
-    MZ_Hdr *mz_hdr = malloc(sizeof(MZ_Hdr));
-
-    if (fseek(fp, 0, SEEK_SET) != 0) {
-        free(mz_hdr);
-        return NULL;
-    }
-
-    if (fread(mz_hdr, sizeof(MZ_Hdr), 1, fp) != 1) {
-        free(mz_hdr);
-        return NULL;
-    }
-
-    if (mz_hdr->signature != 0x5a4D && mz_hdr->signature != 0x4D5a) {
-        free(mz_hdr);
-        return NULL;
-    }
-
-    return mz_hdr;
-}
-
-void disp_header(MZ_Hdr *mz_hdr)
-{
-    printf("DOS Header:\n");
-    printf("Magic number                    0x%x\n", mz_hdr->signature);
-    printf("Bytes in last pages             0x%x\n", mz_hdr->bytes_in_last_block);
-    printf("Pages in file                   0x%x\n", mz_hdr->blocks_in_file);
-    printf("Relocations                     0x%x\n", mz_hdr->num_relocs);
-    printf("Size of header                  0x%x\n", mz_hdr->header_paragraphs);
-    printf("Minimum extra paragraphs        0x%x\n", mz_hdr->min_extra_paragraphs);
-    printf("Maximum extra paragraphs        0x%x\n", mz_hdr->max_extra_paragraphs);
-    printf("Initial ss:sp                   0x%x:0x%x\n", mz_hdr->ss, mz_hdr->sp);
-    printf("Checksum                        0x%x\n", mz_hdr->checksum);
-    printf("Initial cs:ip                   0x%x:0x%x\n", mz_hdr->cs, mz_hdr->ip);
-    printf("Address of relocation table     0x%x\n", mz_hdr->reloc_table_offset);
-    printf("Overlay number                  0x%x\n\n", mz_hdr->overlay_number);
-}
-
-uint64_t get_entry(MZ_Hdr *mz_hdr)
-{
-    return ((mz_hdr->header_paragraphs + mz_hdr->cs) << 4) + mz_hdr->ip;
-}
-
-size_t get_exe_size(MZ_Hdr *mz_hdr)
-{
-    size_t size = mz_hdr->blocks_in_file * 512 - (mz_hdr->header_paragraphs * 16);
-    if (mz_hdr->bytes_in_last_block)
-        size -= (512 - mz_hdr->bytes_in_last_block);
-
-    return size;
-}
 
 static char *get_opcodes(cs_insn insn)
 {
@@ -314,7 +188,12 @@ static uint8_t get_reg_ah(cs_insn insn)
     return reg_ah;
 }
 
-static void print_comment(cs_insn insn, char *opcodes, uint8_t r_ah)
+static void print_insn(cs_insn insn, char *opcodes)
+{
+    printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes, insn.mnemonic, insn.op_str);
+}
+
+static void print_comment(cs_insn insn, const char *opcodes, uint8_t r_ah)
 {
     cs_detail *detail = insn.detail;
 
@@ -323,7 +202,7 @@ static void print_comment(cs_insn insn, char *opcodes, uint8_t r_ah)
         if (r_ah != 0xff) {
             printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn.address, opcodes,
                    insn.mnemonic, insn.op_str, int21h[r_ah]);
-            free(opcodes);
+            free((void*)opcodes); //TODO: Why?
 
             if (r_ah == 0x4c)
                 printf("========\n");
@@ -333,27 +212,33 @@ static void print_comment(cs_insn insn, char *opcodes, uint8_t r_ah)
         printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; exit()\n", insn.address, opcodes,
                insn.mnemonic, insn.op_str);
         printf("========\n");
-        free(opcodes);
+        free((void*)opcodes);
         break;
     default:
         printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes, insn.mnemonic,
                insn.op_str);
-        free(opcodes);
+        free((void*)opcodes);
     }
 }
 
-list *search_addr(uint64_t addr, size_t size, uint8_t *buffer, addr_type mode)
+std::list<Address> search_addr(uint64_t addr, size_t size, uint8_t *buffer, Address_type t)
 {
     csh handle;
     cs_insn *insn;
     cs_detail *detail;
 
-    list *l = NULL;
+    std::list<Address> l;
 
-    if (mode == CALL_ADDR)
-        l = list_init(addr, true);
+    if (t != CALL_ADDR && t != JUMP_ADDR) {
+        fprintf(stderr, "ERROR: Wrong Address_type argument\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (t == CALL_ADDR)
+        l.push_back(Address(addr, false, CALL_ADDR));
     else
-        l = list_init(0, false);
+        l.push_back(Address(0, false, JUMP_ADDR));
+
 
     if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
         fprintf(stderr, "ERROR: Failed to initialize engine!\n");
@@ -367,13 +252,13 @@ list *search_addr(uint64_t addr, size_t size, uint8_t *buffer, addr_type mode)
         const uint8_t *code = &buffer[i + addr];
         insn = cs_malloc(handle);
 
-        if (mode == CALL_ADDR) {
+        if (t == CALL_ADDR) {
             while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
                 if (cs_insn_group(handle, insn, CS_GRP_CALL)) {
                     detail = insn->detail;
                     if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
                         if ((uint64_t)detail->x86.operands[0].imm < size)
-                            list_add(l, detail->x86.operands[0].imm, true);
+                            l.push_back(Address(detail->x86.operands[0].imm, false, CALL_ADDR));
                 }
             }
         } else {
@@ -382,7 +267,7 @@ list *search_addr(uint64_t addr, size_t size, uint8_t *buffer, addr_type mode)
                     detail = insn->detail;
                     if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
                         if ((uint64_t)detail->x86.operands[0].imm < size)
-                            list_add(l, detail->x86.operands[0].imm, false);
+                            l.push_back(Address(detail->x86.operands[0].imm, false, JUMP_ADDR));
                 }
             }
         }
@@ -392,32 +277,33 @@ list *search_addr(uint64_t addr, size_t size, uint8_t *buffer, addr_type mode)
 
     cs_close(&handle);
 
-    list_remove_duplicates(l);
+    l.sort(cmp_addr);
+    l.unique(equ_addr);
 
     return l;
 }
 
-static void check_jump(list *node, uint64_t data)
+static void check_jump(std::list<Address> l, uint64_t data)
 {
-    if (list_cmp_addr(node, data)) {
-        list *l = get_node(node, data);
+    for (auto& i : l) {
+        if (i.value == data) {
+            if (!i.visited) {
+                i.visited = true;
 
-        if (!l->visited) {
-            l->visited = true;
-
-            if (!l->is_proc)
-                printf("\nL_0x%lx:\n", data);
+                if (i.type == JUMP_ADDR)
+                    printf("\nL_0x%lx:\n", data);
+            }
         }
     }
 }
 
-void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, list *call, list *jump)
+void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, Address call, std::list<Address> jump)
 {
     csh handle = 0;
     cs_insn *insn;
 
     uint8_t r_ah = 0xff;
-    call->visited = true;
+    call.visited = true;
 
     if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
         fprintf(stderr, "ERROR: Failed to initialize engine!\n");
@@ -446,14 +332,12 @@ void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, list
                 if (insn->id == X86_INS_INT) {
                     print_comment(*insn, opcodes, r_ah);
                 } else {
-                    printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn->address, opcodes,
-                           insn->mnemonic, insn->op_str);
+                    print_insn(*insn, opcodes);
                     free(opcodes);
 
                     check_jump(jump, addr);
 
-                    if (list_cmp_addr(call, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
-                        cs_insn_group(handle, insn, CS_GRP_IRET))
+                    if (cs_insn_group(handle, insn, CS_GRP_RET) || cs_insn_group(handle, insn, CS_GRP_IRET))
                         goto end;
                 }
             }
@@ -474,14 +358,12 @@ void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, list
                 if (insn->id == X86_INS_INT) {
                     print_comment(*insn, opcodes, r_ah);
                 } else {
-                    printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn->address, opcodes,
-                           insn->mnemonic, insn->op_str);
+                    print_insn(*insn, opcodes);
                     free(opcodes);
 
                     check_jump(jump, addr);
 
-                    if (cs_insn_group(handle, insn, CS_GRP_RET) ||
-                        cs_insn_group(handle, insn, CS_GRP_IRET))
+                    if (cs_insn_group(handle, insn, CS_GRP_RET) || cs_insn_group(handle, insn, CS_GRP_IRET))
                         goto end;
                 }
             }
@@ -514,8 +396,7 @@ void ls_disasm(uint64_t addr, size_t size, uint8_t *buffer)
 
         while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
             char *opcodes = get_opcodes(*insn);
-            printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn->address, opcodes, insn->mnemonic,
-                   insn->op_str);
+            print_insn(*insn, opcodes);
             free(opcodes);
         }
         cs_free(insn, 1);

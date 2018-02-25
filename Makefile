@@ -1,12 +1,13 @@
-CFLAGS = -Wall -Wextra -pedantic -ggdb3
+CC = g++
+CFLAGS = -Wall -Wextra -ggdb3
 LDFLAGS = -lcapstone
 
 all: ded
 
-ded: main.o core.o
+ded: main.o mz_exe.o core.o options.o
 	${CC} ${CFLAGS} $^ -o $@ ${LDFLAGS}
 
-%.o: %.c
+%.o: %.cpp
 	${CC} ${CFLAGS} -c $^ -o $@
 
 .PHONY: clean

@@ -1,3 +1,4 @@
+CXX = clang++
 CXXFLAGS = -Wall -Wextra -ggdb3
 LDFLAGS = -lcapstone
 

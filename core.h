@@ -39,7 +39,7 @@ inline bool cmp_addr(Address a, Address b)
 
 std::list<Address> search_addr(Binary b, Address_type t);
 
-void rt_disasm(Binary b, uint64_t addr, Address call, std::list<Address> jump);
+void rt_disasm(Binary b, uint64_t addr, Address &a, const std::list<Address> &l_call, std::list<Address> &l_jump);
 void ls_disasm(Binary b);
 
 

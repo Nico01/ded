@@ -70,7 +70,7 @@ static int rtd(Options o, Binary b)
 
         for (auto& i : proc_addr) {
             if (!i.visited && i.value < b.size)
-                rt_disasm(b, i.value, i, labl_addr);
+                rt_disasm(b, i.value, i, proc_addr, labl_addr);
         }
 
     } else {
@@ -86,7 +86,7 @@ static int rtd(Options o, Binary b)
 
         for (auto& i : proc_addr) {
             if (!i.visited && i.value < b.size)
-                rt_disasm(b, i.value, i, labl_addr);
+                rt_disasm(b, i.value, i, proc_addr, labl_addr);
         }
     }
 

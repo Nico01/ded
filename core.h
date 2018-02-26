@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <list>
 
+#include "binary.h"
+
 
 enum class Address_type { Undefined, Call, Jump };
 
@@ -35,10 +37,10 @@ inline bool cmp_addr(Address a, Address b)
 }
 
 
-std::list<Address> search_addr(uint64_t addr, size_t size, uint8_t *buffer, Address_type t);
+std::list<Address> search_addr(Binary b, Address_type t);
 
-void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, Address call, std::list<Address> jump);
-void ls_disasm(uint64_t addr, size_t size, uint8_t *buffer);
+void rt_disasm(Binary b, uint64_t addr, Address call, std::list<Address> jump);
+void ls_disasm(Binary b);
 
 
 #endif // _DED_CORE_H

@@ -6,12 +6,10 @@
 
 Mz::Mz(std::string s)
 {
-    std::ifstream f;
-
-    f.open(s, std::ifstream::binary);
+    std::ifstream f(s, std::ifstream::binary);
 
     if (!f.is_open()) {
-        fprintf(stderr, "File error\n");
+        fprintf(stderr, "Error %s: No such file or directory\n", s.c_str());
         exit(EXIT_FAILURE);
     }
 

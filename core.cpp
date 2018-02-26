@@ -221,7 +221,7 @@ static void print_comment(cs_insn insn, const char *opcodes, uint8_t r_ah)
     }
 }
 
-std::list<Address> search_addr(uint64_t addr, size_t size, uint8_t *buffer, Address_type t)
+std::list<Address> search_addr(Binary b, Address_type t)
 {
     csh handle;
     cs_insn *insn;
@@ -235,7 +235,7 @@ std::list<Address> search_addr(uint64_t addr, size_t size, uint8_t *buffer, Addr
     }
 
     if (t == Address_type::Call)
-        l.push_back(Address(addr, false, Address_type::Call));
+        l.push_back(Address(b.entry, false, Address_type::Call));
     else
         l.push_back(Address(0, false, Address_type::Jump));
 
@@ -248,8 +248,11 @@ std::list<Address> search_addr(uint64_t addr, size_t size, uint8_t *buffer, Addr
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
     cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
 
+    uint64_t addr = b.entry;
+    size_t size = b.size;
+
     for (size_t i = 0; i < size; i++) {
-        const uint8_t *code = &buffer[i + addr];
+        const uint8_t *code = &b.data[i + addr];
         insn = cs_malloc(handle);
 
         if (t == Address_type::Call) {
@@ -297,7 +300,7 @@ static void check_jump(std::list<Address> l, uint64_t data)
     }
 }
 
-void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, Address call, std::list<Address> jump)
+void rt_disasm(Binary b, uint64_t addr, Address call, std::list<Address> jump)
 {
     csh handle = 0;
     cs_insn *insn;
@@ -313,14 +316,17 @@ void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, Addr
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
     cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
 
-    if (addr > (size + entry))
+    size_t size = b.size;
+
+    if (addr > (size + b.entry))
         goto end;
 
-    if (addr == entry) {
+
+    if (addr == b.entry) {
         printf(".start:\n");
 
         for (size_t i = 0; i < size; i++) {
-            const uint8_t *code = &buffer[i + addr];
+            const uint8_t *code = &b.data[i + addr];
             insn = cs_malloc(handle);
 
             while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
@@ -347,7 +353,7 @@ void rt_disasm(uint64_t entry, uint64_t addr, size_t size, uint8_t *buffer, Addr
         printf("\n\nproc_0x%lx:\n", addr);
 
         for (size_t i = 0; i < size; i++) {
-            const uint8_t *code = &buffer[i + addr];
+            const uint8_t *code = &b.data[i + addr];
             insn = cs_malloc(handle);
 
             while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
@@ -375,10 +381,9 @@ end:
     cs_close(&handle);
 }
 
-void ls_disasm(uint64_t addr, size_t size, uint8_t *buffer)
+void ls_disasm(Binary b)
 {
     csh handle = 0;
-    cs_insn *insn;
 
     if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
         fprintf(stderr, "ERROR: Failed to initialize engine!\n");
@@ -390,16 +395,19 @@ void ls_disasm(uint64_t addr, size_t size, uint8_t *buffer)
 
     printf(".start:\n");
 
-    for (size_t i = 0; i < size; i++) {
-        const uint8_t *code = &buffer[i + addr];
-        insn = cs_malloc(handle);
 
-        while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-            char *opcodes = get_opcodes(*insn);
-            print_insn(*insn, opcodes);
-            free(opcodes);
-        }
-        cs_free(insn, 1);
+    uint64_t addr = b.entry;
+    size_t size = b.size;
+    const uint8_t *code = &b.data[0 + b.entry];
+
+    cs_insn *insn = cs_malloc(handle);
+
+    while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
+        char *opcodes = get_opcodes(*insn);
+        print_insn(*insn, opcodes);
+        free(opcodes);
     }
+
+    cs_free(insn, 1);
     cs_close(&handle);
 }

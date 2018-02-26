@@ -27,6 +27,8 @@ int main(int argc, char *argv[])
 
     Binary bin(opts.filename);
 
+    printf("File %s\t Size %zu bytes\n", opts.filename.c_str(), bin.size);
+
     if (opts.recursive) {
         int err = rtd(opts, bin);
         if (err)
@@ -65,12 +67,11 @@ static int rtd(Options o, Binary b)
 
         b.entry = exe_entry;
 
-        std::list<Address> proc_addr = search_addr(b, Address_type::Call);
-        std::list<Address> labl_addr = search_addr(b, Address_type::Jump);
+        std::list<Address> addr_list = search_addr(b);
 
-        for (auto& i : proc_addr) {
-            if (!i.visited && i.value < b.size)
-                rt_disasm(b, i.value, i, proc_addr, labl_addr);
+        for (auto& i : addr_list) {
+            if (i.type == Address_type::Call && !i.visited && i.value < b.size)
+                rt_disasm(b, i.value, i, addr_list);
         }
 
     } else {
@@ -81,12 +82,11 @@ static int rtd(Options o, Binary b)
 
         b.entry = exe_entry;
 
-        std::list<Address> proc_addr = search_addr(b, Address_type::Call);
-        std::list<Address> labl_addr = search_addr(b, Address_type::Jump);
+        std::list<Address> addr_list = search_addr(b);
 
-        for (auto& i : proc_addr) {
-            if (!i.visited && i.value < b.size)
-                rt_disasm(b, i.value, i, proc_addr, labl_addr);
+        for (auto& i : addr_list) {
+            if (i.type == Address_type::Call && !i.visited && i.value < b.size)
+                rt_disasm(b, i.value, i, addr_list);
         }
     }
 

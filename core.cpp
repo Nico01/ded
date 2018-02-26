@@ -221,24 +221,10 @@ static void print_comment(cs_insn insn, const char *opcodes, uint8_t r_ah)
     }
 }
 
-std::list<Address> search_addr(Binary b, Address_type t)
+std::list<Address> search_addr(const Binary &b)
 {
     csh handle;
-    cs_insn *insn;
     cs_detail *detail;
-
-    std::list<Address> l;
-
-    if (t == Address_type::Undefined) {
-        fprintf(stderr, "ERROR: Wrong Address_type argument\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (t == Address_type::Call)
-        l.push_back(Address(b.entry, false, Address_type::Call));
-    else
-        l.push_back(Address(0, false, Address_type::Jump));
-
 
     if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
         fprintf(stderr, "ERROR: Failed to initialize engine!\n");
@@ -248,29 +234,29 @@ std::list<Address> search_addr(Binary b, Address_type t)
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
     cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
 
+
+    std::list<Address> l;
+
+    l.push_back(Address(b.entry, false, Address_type::Call));
+
     uint64_t addr = b.entry;
     size_t size = b.size;
     const uint8_t *code = &b.data[addr];
 
-    insn = cs_malloc(handle);
+    cs_insn *insn = cs_malloc(handle);
 
-    if (t == Address_type::Call) {
-        while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-            if (cs_insn_group(handle, insn, CS_GRP_CALL)) {
-                detail = insn->detail;
-                if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
-                    if ((uint64_t)detail->x86.operands[0].imm < size)
-                        l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Call));
-            }
+    while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
+        if (cs_insn_group(handle, insn, CS_GRP_CALL)) {
+            detail = insn->detail;
+            if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
+                if ((uint64_t)detail->x86.operands[0].imm < size)
+                    l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Call));
         }
-    } else {
-        while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-            if (cs_insn_group(handle, insn, CS_GRP_JUMP)) {
-                detail = insn->detail;
-                if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
-                    if ((uint64_t)detail->x86.operands[0].imm < size)
-                        l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Jump));
-            }
+        if (cs_insn_group(handle, insn, CS_GRP_JUMP)) {
+            detail = insn->detail;
+            if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
+                if ((uint64_t)detail->x86.operands[0].imm < size)
+                    l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Jump));
         }
     }
 
@@ -286,8 +272,9 @@ std::list<Address> search_addr(Binary b, Address_type t)
 static bool check_call(const std::list<Address> &l, const uint64_t data)
 {
     for (const auto& i : l) {
-        if (i.value == data)
-            return true;
+        if (i.type == Address_type::Call)
+            if (i.value == data)
+                return true;
     }
     return false;
 }
@@ -295,18 +282,16 @@ static bool check_call(const std::list<Address> &l, const uint64_t data)
 static void check_jump(std::list<Address> &l, const uint64_t data)
 {
     for (auto& i : l) {
-        if (i.value == data) {
-            if (!i.visited) {
-                i.visited = true;
-
-                if (i.type == Address_type::Jump)
+        if (i.type == Address_type::Jump)
+            if (i.value == data)
+                if (!i.visited) {
+                    i.visited = true;
                     printf("\nL_0x%lx:\n", data);
-            }
-        }
+                }
     }
 }
 
-void rt_disasm(Binary b, uint64_t addr, Address &a, const std::list<Address> &l_call, std::list<Address> &l_jump)
+void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &addr_list)
 {
     csh handle = 0;
 
@@ -343,16 +328,16 @@ void rt_disasm(Binary b, uint64_t addr, Address &a, const std::list<Address> &l_
 
             if (insn->id == X86_INS_INT) {
                 print_comment(*insn, opcodes, r_ah);
-                if (check_call(l_call, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
+                if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
                     cs_insn_group(handle, insn, CS_GRP_IRET))
                     break;
             } else {
                 print_insn(*insn, opcodes);
                 free(opcodes);
 
-                check_jump(l_jump, addr);
+                check_jump(addr_list, addr);
 
-                if (check_call(l_call, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
+                if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
                     cs_insn_group(handle, insn, CS_GRP_IRET))
                     break;
             }
@@ -367,16 +352,16 @@ void rt_disasm(Binary b, uint64_t addr, Address &a, const std::list<Address> &l_
 
             if (insn->id == X86_INS_INT) {
                 print_comment(*insn, opcodes, r_ah);
-                if (check_call(l_call, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
+                if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
                     cs_insn_group(handle, insn, CS_GRP_IRET))
                     break;
             } else {
                 print_insn(*insn, opcodes);
                 free(opcodes);
 
-                check_jump(l_jump, addr);
+                check_jump(addr_list, addr);
 
-                if (check_call(l_call, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
+                if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
                     cs_insn_group(handle, insn, CS_GRP_IRET))
                     break;
             }
@@ -388,7 +373,7 @@ void rt_disasm(Binary b, uint64_t addr, Address &a, const std::list<Address> &l_
     cs_close(&handle);
 }
 
-void ls_disasm(Binary b)
+void ls_disasm(const Binary &b)
 {
     csh handle = 0;
 

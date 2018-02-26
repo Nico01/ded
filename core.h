@@ -37,10 +37,10 @@ inline bool cmp_addr(Address a, Address b)
 }
 
 
-std::list<Address> search_addr(Binary b, Address_type t);
+std::list<Address> search_addr(const Binary &b);
 
-void rt_disasm(Binary b, uint64_t addr, Address &a, const std::list<Address> &l_call, std::list<Address> &l_jump);
-void ls_disasm(Binary b);
+void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &addr_list);
+void ls_disasm(const Binary &b);
 
 
 #endif // _DED_CORE_H

@@ -3,6 +3,8 @@
 #include <list>
 #include <cstring>
 #include <cstdlib>
+#include <iomanip>
+#include <sstream>
 #include <capstone/capstone.h>
 #include <cinttypes>
 
@@ -151,31 +153,23 @@ char *int10h[] = {
 */
 
 
-
-static char *get_opcodes(cs_insn insn)
+static std::string get_opcodes(const cs_insn insn)
 {
-    uint8_t len = (2 * insn.size) + 1;
-    char opstr[32];
-    char *opptr = opstr;
+    std::stringstream ss;
 
-    for (int i = 0; i < insn.size; i++) {
-        opptr += snprintf(opptr, len, "%02x ", insn.bytes[i]);
-    }
+    for (auto i = 0; i < insn.size; ++i)
+        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<uint16_t>(insn.bytes[i]) << " ";
 
-    *(opptr + 1) = '\0';
-    char *opcodes = strdup(opstr);
-
-    return opcodes;
+    return ss.str();
 }
 
-static uint8_t get_reg_ah(cs_insn insn)
+static uint8_t get_reg_ah(const cs_insn insn)
 {
     cs_detail *detail = insn.detail;
     uint8_t reg_ah = 0xff;
 
     if (detail->x86.op_count == 2) {
-        if (detail->x86.operands[0].type == X86_OP_REG &&
-            detail->x86.operands[1].type == X86_OP_IMM) {
+        if (detail->x86.operands[0].type == X86_OP_REG && detail->x86.operands[1].type == X86_OP_IMM) {
             if (detail->x86.operands[0].reg == X86_REG_AH)
                 reg_ah = detail->x86.operands[1].imm;
 
@@ -188,36 +182,36 @@ static uint8_t get_reg_ah(cs_insn insn)
     return reg_ah;
 }
 
-static void print_insn(cs_insn insn, char *opcodes)
+static void print_insn(const cs_insn insn)
 {
-    printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes, insn.mnemonic, insn.op_str);
+    std::string opcodes = get_opcodes(insn);
+
+    printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic, insn.op_str);
 }
 
-static void print_comment(cs_insn insn, const char *opcodes, uint8_t r_ah)
+static void print_comment(const cs_insn insn, const uint8_t r_ah)
 {
     cs_detail *detail = insn.detail;
+    std::string opcodes = get_opcodes(insn);
 
     switch (detail->x86.operands[0].imm) {
     case 0x21:
         if (r_ah != 0xff) {
-            printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn.address, opcodes,
+            printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn.address, opcodes.c_str(),
                    insn.mnemonic, insn.op_str, int21h[r_ah]);
-            free((void*)opcodes); //TODO: Why?
 
             if (r_ah == 0x4c)
                 printf("========\n");
         }
         break;
     case 0x20:
-        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; exit()\n", insn.address, opcodes,
+        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; exit()\n", insn.address, opcodes.c_str(),
                insn.mnemonic, insn.op_str);
         printf("========\n");
-        free((void*)opcodes);
         break;
     default:
-        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes, insn.mnemonic,
+        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic,
                insn.op_str);
-        free((void*)opcodes);
     }
 }
 
@@ -321,20 +315,16 @@ void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &a
         printf(".start:\n");
 
         while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-            char *opcodes = get_opcodes(*insn);
-
             if (get_reg_ah(*insn) != 0xff)
                 r_ah = get_reg_ah(*insn);
 
             if (insn->id == X86_INS_INT) {
-                print_comment(*insn, opcodes, r_ah);
+                print_comment(*insn, r_ah);
                 if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
                     cs_insn_group(handle, insn, CS_GRP_IRET))
                     break;
             } else {
-                print_insn(*insn, opcodes);
-                free(opcodes);
-
+                print_insn(*insn);
                 check_jump(addr_list, addr);
 
                 if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
@@ -346,19 +336,16 @@ void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &a
         printf("\n\nproc_0x%lx:\n", addr);
 
         while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-            char *opcodes = get_opcodes(*insn);
             if (get_reg_ah(*insn) != 0xff)
                 r_ah = get_reg_ah(*insn);
 
             if (insn->id == X86_INS_INT) {
-                print_comment(*insn, opcodes, r_ah);
+                print_comment(*insn, r_ah);
                 if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
                     cs_insn_group(handle, insn, CS_GRP_IRET))
                     break;
             } else {
-                print_insn(*insn, opcodes);
-                free(opcodes);
-
+                print_insn(*insn);
                 check_jump(addr_list, addr);
 
                 if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
@@ -394,12 +381,10 @@ void ls_disasm(const Binary &b)
 
     cs_insn *insn = cs_malloc(handle);
 
-    while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-        char *opcodes = get_opcodes(*insn);
-        print_insn(*insn, opcodes);
-        free(opcodes);
-    }
+    while (cs_disasm_iter(handle, &code, &size, &addr, insn))
+        print_insn(*insn);
 
     cs_free(insn, 1);
     cs_close(&handle);
 }
+

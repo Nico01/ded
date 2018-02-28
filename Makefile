@@ -4,7 +4,7 @@ LDFLAGS = -lcapstone
 
 all: ded
 
-ded: main.o mz_exe.o core.o options.o binary.o
+ded: main.o core.o options.o binary.o
 	${CXX} ${CXXFLAGS} $^ -o $@ ${LDFLAGS}
 
 %.o: %.cpp

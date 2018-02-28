@@ -1,16 +1,13 @@
 // DOS Executable Disassembler
 
 #include "core.h"
-#include "mz_exe.h"
 #include "binary.h"
 #include "options.h"
 
 #include <cstdio>
 
 
-
-static int rtd(Options o, Binary b);
-static int lsd(Options o, Binary b);
+static void disasm(Options o, Binary b);
 
 
 int main(int argc, char *argv[])
@@ -25,113 +22,25 @@ int main(int argc, char *argv[])
         usage(std::string {argv[0]});
     }
 
-    Binary bin(opts.filename);
+    Binary bin(opts);
 
-    printf("File %s\t Size %zu bytes\n", opts.filename.c_str(), bin.size);
+    printf("File %s\t Size %zu (0x%zx) bytes\n", opts.filename.c_str(), bin.fsize, bin.fsize);
 
-    if (opts.recursive) {
-        int err = rtd(opts, bin);
-        if (err)
-            return EXIT_FAILURE;
-    } else {
-        int err = lsd(opts, bin);
-        if (err)
-            return EXIT_FAILURE;
-    }
+    disasm(opts, bin);
 
     return 0;
 }
 
-static int rtd(Options o, Binary b)
+
+static void disasm(Options o, Binary b)
 {
-    uint64_t exe_entry;
-
-    if (o.mz) {
-        Mz mz(o.filename);
-
-        if (!mz.is_ok()) {
-            fprintf(stderr, "%s: File format not recognized\n", o.filename.c_str());
-            return 1;
-        }
-
-        if (o.entry)
-            exe_entry = o.ep;
-        else
-            exe_entry = mz.get_entry();
-
-        if (exe_entry > b.size)
-            exe_entry = 0x1c;
-
-        if (o.hdr)
-            mz.disp_header();
-
-        b.entry = exe_entry;
-
+    if (o.recursive) {
         std::list<Address> addr_list = search_addr(b);
 
-        for (auto& i : addr_list) {
-            if (i.type == Address_type::Call && !i.visited && i.value < b.size)
+        for (auto& i : addr_list)
+            if (i.type == Address_type::Call && !i.visited && i.value < b.fsize)
                 rt_disasm(b, i.value, i, addr_list);
-        }
-
-    } else {
-        if (o.entry)
-            exe_entry = o.ep;
-        else
-            exe_entry = 0;
-
-        b.entry = exe_entry;
-
-        std::list<Address> addr_list = search_addr(b);
-
-        for (auto& i : addr_list) {
-            if (i.type == Address_type::Call && !i.visited && i.value < b.size)
-                rt_disasm(b, i.value, i, addr_list);
-        }
-    }
-
-    return 0;
-}
-
-static int lsd(Options o, Binary b)
-{
-    uint64_t exe_entry;
-
-    if (o.mz) {
-        Mz mz(o.filename);
-
-        if (!mz.is_ok()) {
-            fprintf(stderr, "%s: File format not recognized\n", o.filename.c_str());
-            return 1;
-        }
-
-        if (o.entry)
-            exe_entry = o.ep;
-        else
-            exe_entry = mz.get_entry();
-
-        if (exe_entry > b.size)
-            exe_entry = 0x1c;
-
-        if (o.hdr)
-            mz.disp_header();
-
-        b.entry = exe_entry;
-
+    } else
         ls_disasm(b);
-
-    } else {
-        if (o.entry)
-            exe_entry = o.ep;
-        else
-            exe_entry = 0;
-
-        b.entry = exe_entry;
-
-        ls_disasm(b);
-    }
-
-    return 0;
 }
-
 

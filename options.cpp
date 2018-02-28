@@ -1,5 +1,5 @@
-#include "options.h"
 #include <getopt.h>
+#include "options.h"
 
 Options::Options(int argc, char *argv[])
 {

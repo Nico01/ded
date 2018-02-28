@@ -1,5 +1,3 @@
-#include "core.h"
-
 #include <list>
 #include <cstring>
 #include <cstdlib>
@@ -7,6 +5,8 @@
 #include <sstream>
 #include <capstone/capstone.h>
 #include <cinttypes>
+
+#include "core.h"
 
 const char *int21h[] = {
     "Terminate process",                            // 0x00
@@ -153,7 +153,7 @@ char *int10h[] = {
 */
 
 
-static std::string get_opcodes(const cs_insn insn)
+static std::string get_opcodes_str(const cs_insn insn)
 {
     std::stringstream ss;
 
@@ -184,15 +184,15 @@ static uint8_t get_reg_ah(const cs_insn insn)
 
 static void print_insn(const cs_insn insn)
 {
-    std::string opcodes = get_opcodes(insn);
+    std::string opcodes = get_opcodes_str(insn);
 
     printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic, insn.op_str);
 }
 
-static void print_comment(const cs_insn insn, const uint8_t r_ah)
+static int print_comment(const cs_insn insn, const uint8_t r_ah)
 {
     cs_detail *detail = insn.detail;
-    std::string opcodes = get_opcodes(insn);
+    std::string opcodes = get_opcodes_str(insn);
 
     switch (detail->x86.operands[0].imm) {
     case 0x21:
@@ -200,19 +200,23 @@ static void print_comment(const cs_insn insn, const uint8_t r_ah)
             printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn.address, opcodes.c_str(),
                    insn.mnemonic, insn.op_str, int21h[r_ah]);
 
-            if (r_ah == 0x4c)
+            if (r_ah == 0x4c) {
                 printf("========\n");
+                return 1;
+            }
         }
         break;
     case 0x20:
         printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; exit()\n", insn.address, opcodes.c_str(),
                insn.mnemonic, insn.op_str);
         printf("========\n");
-        break;
+        return 1;
     default:
         printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic,
                insn.op_str);
     }
+
+    return 0;
 }
 
 std::list<Address> search_addr(const Binary &b)
@@ -243,13 +247,13 @@ std::list<Address> search_addr(const Binary &b)
         if (cs_insn_group(handle, insn, CS_GRP_CALL)) {
             detail = insn->detail;
             if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
-                if ((uint64_t)detail->x86.operands[0].imm < size)
+                if ((uint64_t)detail->x86.operands[0].imm < b.fsize)
                     l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Call));
         }
         if (cs_insn_group(handle, insn, CS_GRP_JUMP)) {
             detail = insn->detail;
             if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
-                if ((uint64_t)detail->x86.operands[0].imm < size)
+                if ((uint64_t)detail->x86.operands[0].imm < b.fsize)
                     l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Jump));
         }
     }
@@ -301,12 +305,6 @@ void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &a
     cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
 
     size_t size = b.size;
-
-    if (addr > (size + b.entry)) {
-        cs_close(&handle);
-        return;
-    }
-
     const uint8_t *code = &b.data[addr];
 
     cs_insn *insn = cs_malloc(handle);
@@ -319,7 +317,8 @@ void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &a
                 r_ah = get_reg_ah(*insn);
 
             if (insn->id == X86_INS_INT) {
-                print_comment(*insn, r_ah);
+                if (print_comment(*insn, r_ah))
+                    break;
                 if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
                     cs_insn_group(handle, insn, CS_GRP_IRET))
                     break;
@@ -340,7 +339,8 @@ void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &a
                 r_ah = get_reg_ah(*insn);
 
             if (insn->id == X86_INS_INT) {
-                print_comment(*insn, r_ah);
+                if (print_comment(*insn, r_ah))
+                    break;
                 if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
                     cs_insn_group(handle, insn, CS_GRP_IRET))
                     break;

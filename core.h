@@ -7,20 +7,12 @@
 #include "binary.h"
 
 
-enum class Address_type { Undefined, Call, Jump };
+enum class Address_type { Main, Call, Jump, JmpX };
 
 struct Address {
     uint64_t value;
     bool visited;
     Address_type type;
-
-    Address(){}
-
-	Address(const uint64_t a)
-		: value(a), visited(false), type(Address_type::Undefined){}
-
-	Address(const uint64_t a, bool b)
-		: value(a), visited(b), type(Address_type::Undefined){}
 
 	Address(const uint64_t a, bool b, Address_type t)
 		: value(a), visited(b), type(t){}
@@ -39,7 +31,7 @@ inline bool cmp_addr(Address a, Address b)
 
 std::list<Address> search_addr(const Binary &b);
 
-void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &addr_list);
+void rt_disasm(const Binary &b, Address &a, std::list<Address> &addr_list);
 void ls_disasm(const Binary &b);
 
 

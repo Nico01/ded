@@ -189,31 +189,34 @@ static void print_insn(const cs_insn insn)
     printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic, insn.op_str);
 }
 
-static int print_comment(const cs_insn insn, const uint8_t r_ah)
+static int print_insn_r(const cs_insn insn, const uint8_t r_ah)
 {
     cs_detail *detail = insn.detail;
     std::string opcodes = get_opcodes_str(insn);
 
-    switch (detail->x86.operands[0].imm) {
-    case 0x21:
-        if (r_ah != 0xff) {
-            printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn.address, opcodes.c_str(),
-                   insn.mnemonic, insn.op_str, int21h[r_ah]);
+    if (insn.id == X86_INS_INT) {
+        switch (detail->x86.operands[0].imm) {
+        case 0x21:
+            if (r_ah != 0xff) {
+                printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn.address, opcodes.c_str(), insn.mnemonic,
+                       insn.op_str, int21h[r_ah]);
 
-            if (r_ah == 0x4c) {
-                printf("========\n");
-                return 1;
+                if (r_ah == 0x4c) {
+                    printf("========\n");
+                    return 1;
+                }
             }
+            break;
+        case 0x20:
+            printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; exit()\n", insn.address, opcodes.c_str(), insn.mnemonic,
+                   insn.op_str);
+            printf("========\n");
+            return 1;
+        default:
+            printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic, insn.op_str);
         }
-        break;
-    case 0x20:
-        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; exit()\n", insn.address, opcodes.c_str(),
-               insn.mnemonic, insn.op_str);
-        printf("========\n");
-        return 1;
-    default:
-        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic,
-               insn.op_str);
+    } else {
+        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic, insn.op_str);
     }
 
     return 0;
@@ -235,7 +238,7 @@ std::list<Address> search_addr(const Binary &b)
 
     std::list<Address> l;
 
-    l.push_back(Address(b.entry, false, Address_type::Call));
+    l.push_back(Address(b.entry, false, Address_type::Main));
 
     uint64_t addr = b.entry;
     size_t size = b.size;
@@ -244,17 +247,25 @@ std::list<Address> search_addr(const Binary &b)
     cs_insn *insn = cs_malloc(handle);
 
     while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
+        if (addr > b.fsize)
+            break;
         if (cs_insn_group(handle, insn, CS_GRP_CALL)) {
             detail = insn->detail;
             if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
                 if ((uint64_t)detail->x86.operands[0].imm < b.fsize)
                     l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Call));
         }
-        if (cs_insn_group(handle, insn, CS_GRP_JUMP)) {
+        if (insn->id == X86_INS_JMP) {
             detail = insn->detail;
             if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
                 if ((uint64_t)detail->x86.operands[0].imm < b.fsize)
                     l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Jump));
+        }
+        if (cs_insn_group(handle, insn, CS_GRP_JUMP) && insn->id != X86_INS_JMP) {
+            detail = insn->detail;
+            if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
+                if ((uint64_t)detail->x86.operands[0].imm < b.fsize)
+                    l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::JmpX));
         }
     }
 
@@ -267,7 +278,7 @@ std::list<Address> search_addr(const Binary &b)
     return l;
 }
 
-static bool check_call(const std::list<Address> &l, const uint64_t data)
+static bool cmp_call(const std::list<Address> &l, const uint64_t data)
 {
     for (const auto& i : l) {
         if (i.type == Address_type::Call)
@@ -277,10 +288,20 @@ static bool check_call(const std::list<Address> &l, const uint64_t data)
     return false;
 }
 
+static bool cmp_jump(const std::list<Address> &l, const uint64_t data)
+{
+    for (const auto& i : l) {
+        if (i.type == Address_type::Jump)
+            if (i.value == data)
+                return true;
+    }
+    return false;
+}
+
 static void check_jump(std::list<Address> &l, const uint64_t data)
 {
     for (auto& i : l) {
-        if (i.type == Address_type::Jump)
+        if (i.type == Address_type::JmpX)
             if (i.value == data)
                 if (!i.visited) {
                     i.visited = true;
@@ -289,7 +310,25 @@ static void check_jump(std::list<Address> &l, const uint64_t data)
     }
 }
 
-void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &addr_list)
+static void print_addr_label(const Address &a)
+{
+    switch (a.type) {
+    case Address_type::Main:
+        printf(".start:\n");
+        break;
+    case Address_type::Call:
+        printf("\n\nproc_0x%lx:\n", a.value);
+        break;
+    case Address_type::Jump:
+        printf("\nL_0x%lx:\n", a.value);
+        break;
+    case Address_type::JmpX:
+        printf("\nL_0x%lx:\n", a.value);
+        break;
+    }
+}
+
+void rt_disasm(const Binary &b, Address &a, std::list<Address> &addr_list)
 {
     csh handle = 0;
 
@@ -304,56 +343,26 @@ void rt_disasm(const Binary &b, uint64_t addr, Address &a, std::list<Address> &a
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
     cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
 
+    uint64_t addr = a.value;
     size_t size = b.size;
     const uint8_t *code = &b.data[addr];
 
     cs_insn *insn = cs_malloc(handle);
 
-    if (addr == b.entry) {
-        printf(".start:\n");
+    print_addr_label(a);
 
-        while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-            if (get_reg_ah(*insn) != 0xff)
-                r_ah = get_reg_ah(*insn);
+    while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
+        if (get_reg_ah(*insn) != 0xff)
+            r_ah = get_reg_ah(*insn);
 
-            if (insn->id == X86_INS_INT) {
-                if (print_comment(*insn, r_ah))
-                    break;
-                if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
-                    cs_insn_group(handle, insn, CS_GRP_IRET))
-                    break;
-            } else {
-                print_insn(*insn);
-                check_jump(addr_list, addr);
+        if (print_insn_r(*insn, r_ah))
+            break;
 
-                if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
-                    cs_insn_group(handle, insn, CS_GRP_IRET))
-                    break;
-            }
-        }
-    } else {
-        printf("\n\nproc_0x%lx:\n", addr);
+        check_jump(addr_list, addr);
 
-        while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-            if (get_reg_ah(*insn) != 0xff)
-                r_ah = get_reg_ah(*insn);
-
-            if (insn->id == X86_INS_INT) {
-                if (print_comment(*insn, r_ah))
-                    break;
-                if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
-                    cs_insn_group(handle, insn, CS_GRP_IRET))
-                    break;
-            } else {
-                print_insn(*insn);
-                check_jump(addr_list, addr);
-
-                if (check_call(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
-                    cs_insn_group(handle, insn, CS_GRP_IRET))
-                    break;
-            }
-        }
-
+        if (cmp_call(addr_list, addr) || cmp_jump(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
+            cs_insn_group(handle, insn, CS_GRP_IRET) || addr >= b.fsize)
+                break;
     }
 
     cs_free(insn, 1);

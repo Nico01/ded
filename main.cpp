@@ -38,8 +38,8 @@ static void disasm(Options o, Binary b)
         std::list<Address> addr_list = search_addr(b);
 
         for (auto& i : addr_list)
-            if (i.type == Address_type::Call && !i.visited && i.value < b.fsize)
-                rt_disasm(b, i.value, i, addr_list);
+            if ((i.type != Address_type::JmpX) && !i.visited)
+                rt_disasm(b, i, addr_list);
     } else
         ls_disasm(b);
 }

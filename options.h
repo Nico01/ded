@@ -10,6 +10,7 @@ struct Options {
     bool mz = false;
     bool recursive = false;
     bool hdr = false;
+    bool verbose = false;
     bool entry = false;
     uint64_t ep = 0;
 

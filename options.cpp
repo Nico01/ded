@@ -5,7 +5,7 @@ Options::Options(int argc, char *argv[])
 {
     int c;
 
-    while ((c = getopt(argc, argv, "Hmhrs:f:")) != -1) {
+    while ((c = getopt(argc, argv, "Hmhrvs:f:")) != -1) {
         switch (c) {
         case 'H':
             usage(argv[0]);
@@ -18,6 +18,9 @@ Options::Options(int argc, char *argv[])
             break;
         case 'r':
             recursive = true;
+            break;
+        case 'v':
+            verbose = true;
             break;
         case 's':
             entry = true;
@@ -41,6 +44,7 @@ void usage(std::string s)
             "\n\t-m    disassemble DOS MZ 16 bits executable\n"
             "\n\t-h    if -m display the DOS MZ header\n"
             "\n\t-r    disassemble file using recursive traversal algorithm (experimental)\n"
+            "\n\t-v    verbose mode: if -r display the list of addresses found\n"
             "\n\t-s    specifies an entry point\n\n"
             "\n\t-f    input file\n\n"
             "\n\tNote:"

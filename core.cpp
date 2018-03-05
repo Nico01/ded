@@ -242,7 +242,7 @@ std::list<Address> search_addr(const Binary &b)
 
     uint64_t addr = b.entry;
     size_t size = b.size;
-    const uint8_t *code = &b.data[addr];
+    const uint8_t *code = &b.data.at(addr);
 
     cs_insn *insn = cs_malloc(handle);
 
@@ -278,34 +278,24 @@ std::list<Address> search_addr(const Binary &b)
     return l;
 }
 
-static bool cmp_call(const std::list<Address> &l, const uint64_t data)
+static bool cmp_addr(const std::list<Address> &l, const uint64_t addr)
 {
     for (const auto& i : l) {
-        if (i.type == Address_type::Call)
-            if (i.value == data)
+        if (i.type == Address_type::Call || i.type == Address_type::Jump)
+            if (i.value == addr)
                 return true;
     }
     return false;
 }
 
-static bool cmp_jump(const std::list<Address> &l, const uint64_t data)
-{
-    for (const auto& i : l) {
-        if (i.type == Address_type::Jump)
-            if (i.value == data)
-                return true;
-    }
-    return false;
-}
-
-static void check_jump(std::list<Address> &l, const uint64_t data)
+static void check_jump(std::list<Address> &l, const uint64_t addr)
 {
     for (auto& i : l) {
         if (i.type == Address_type::JmpX)
-            if (i.value == data)
+            if (i.value == addr)
                 if (!i.visited) {
                     i.visited = true;
-                    printf("\nL_0x%lx:\n", data);
+                    printf("\nL_0x%lx:\n", addr);
                 }
     }
 }
@@ -341,11 +331,12 @@ void rt_disasm(const Binary &b, Address &a, std::list<Address> &addr_list)
     }
 
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
+    cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
     cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
 
     uint64_t addr = a.value;
     size_t size = b.size;
-    const uint8_t *code = &b.data[addr];
+    const uint8_t *code = &b.data.at(addr);
 
     cs_insn *insn = cs_malloc(handle);
 
@@ -358,11 +349,11 @@ void rt_disasm(const Binary &b, Address &a, std::list<Address> &addr_list)
         if (print_insn_r(*insn, r_ah))
             break;
 
-        check_jump(addr_list, addr);
-
-        if (cmp_call(addr_list, addr) || cmp_jump(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
+        if (cmp_addr(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
             cs_insn_group(handle, insn, CS_GRP_IRET) || addr >= b.fsize)
                 break;
+
+        check_jump(addr_list, addr);
     }
 
     cs_free(insn, 1);
@@ -386,7 +377,7 @@ void ls_disasm(const Binary &b)
 
     uint64_t addr = b.entry;
     size_t size = b.size;
-    const uint8_t *code = &b.data[b.entry];
+    const uint8_t *code = &b.data.at(addr);
 
     cs_insn *insn = cs_malloc(handle);
 

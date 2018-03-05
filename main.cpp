@@ -24,13 +24,34 @@ int main(int argc, char *argv[])
 
     Binary bin(opts);
 
-    printf("File %s\t Size %zu (0x%zx) bytes\n", opts.filename.c_str(), bin.fsize, bin.fsize);
+    printf("File %s\t Size %zu (0x%zx) bytes\n\n", opts.filename.c_str(), bin.fsize, bin.fsize);
 
     disasm(opts, bin);
 
     return 0;
 }
 
+static void print_addr_list(std::list<Address> l)
+{
+    printf("\n\nAddress list size: %zu\n", l.size());
+
+    for (auto& i : l) {
+        switch (i.type) {
+        case Address_type::Main:
+            printf("0x%06lx: Main function\n", i.value);
+            break;
+        case Address_type::Call:
+            printf("0x%06lx: function                  \t(visited: %s)\n", i.value, i.visited ? "true" : "false");
+            break;
+        case Address_type::Jump:
+            printf("0x%06lx: branch address            \t(visited: %s)\n", i.value, i.visited ? "true" : "false");
+            break;
+        case Address_type::JmpX:
+            printf("0x%06lx: conditional branch address\t(visited: %s)\n", i.value, i.visited ? "true" : "false");
+            break;
+        }
+    }
+}
 
 static void disasm(Options o, Binary b)
 {
@@ -40,6 +61,10 @@ static void disasm(Options o, Binary b)
         for (auto& i : addr_list)
             if ((i.type != Address_type::JmpX) && !i.visited)
                 rt_disasm(b, i, addr_list);
+
+        if (o.verbose)
+            print_addr_list(addr_list);
+
     } else
         ls_disasm(b);
 }

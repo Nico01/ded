@@ -8,6 +8,7 @@ Options:
     -m    disassemble DOS MZ 16 bits executable
     -h    if -e display the DOS MZ header
     -r    disassemble file using recursive traversal algorithm (experimental)
+    -v    verbose mode: if -r display the list of addresses found
     -s    specifies an entry point
     -f    input file
 

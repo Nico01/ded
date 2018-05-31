@@ -26,6 +26,8 @@ int main(int argc, char *argv[])
 
     printf("File %s\t Size %zu (0x%zx) bytes\n\n", opts.filename.c_str(), bin.fsize, bin.fsize);
 
+    printf("DEBUG: exe size %zu (0x%zx) bytes\n\n", bin.size, bin.size);
+
     disasm(opts, bin);
 
     return 0;

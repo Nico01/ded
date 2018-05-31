@@ -222,10 +222,18 @@ static int print_insn_r(const cs_insn insn, const uint8_t r_ah)
     return 0;
 }
 
+uint64_t get_target_addr(cs_detail *d, size_t max_size)
+{
+    if (d->x86.op_count == 1 && d->x86.operands[0].type == X86_OP_IMM)
+        if ((uint64_t)d->x86.operands[0].imm < max_size)
+            return d->x86.operands[0].imm;
+
+    return 0;
+}
+
 std::list<Address> search_addr(const Binary &b)
 {
     csh handle;
-    cs_detail *detail;
 
     if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
         fprintf(stderr, "ERROR: Failed to initialize engine!\n");
@@ -249,24 +257,24 @@ std::list<Address> search_addr(const Binary &b)
     while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
         if (addr > b.fsize)
             break;
-        if (cs_insn_group(handle, insn, CS_GRP_CALL)) {
-            detail = insn->detail;
-            if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
-                if ((uint64_t)detail->x86.operands[0].imm < b.fsize)
-                    l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Call));
-        }
-        if (insn->id == X86_INS_JMP) {
-            detail = insn->detail;
-            if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
-                if ((uint64_t)detail->x86.operands[0].imm < b.fsize)
-                    l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::Jump));
-        }
-        if (cs_insn_group(handle, insn, CS_GRP_JUMP) && insn->id != X86_INS_JMP) {
-            detail = insn->detail;
-            if (detail->x86.op_count == 1 && detail->x86.operands[0].type == X86_OP_IMM)
-                if ((uint64_t)detail->x86.operands[0].imm < b.fsize)
-                    l.push_back(Address(detail->x86.operands[0].imm, false, Address_type::JmpX));
-        }
+
+        if (cs_insn_group(handle, insn, CS_GRP_CALL))
+            if (get_target_addr(insn->detail, b.fsize) != 0) {
+                l.push_back(Address(insn->detail->x86.operands[0].imm, false, Address_type::Call));
+                continue;
+            }
+
+        if (insn->id == X86_INS_JMP)
+            if (get_target_addr(insn->detail, b.fsize) != 0) {
+                l.push_back(Address(insn->detail->x86.operands[0].imm, false, Address_type::Jump));
+                continue;
+            }
+
+        if (cs_insn_group(handle, insn, CS_GRP_JUMP) && insn->id != X86_INS_JMP)
+            if (get_target_addr(insn->detail, b.fsize) != 0) {
+                l.push_back(Address(insn->detail->x86.operands[0].imm, false, Address_type::JmpX));
+                continue;
+            }
     }
 
     cs_free(insn, 1);
@@ -386,5 +394,11 @@ void ls_disasm(const Binary &b)
 
     cs_free(insn, 1);
     cs_close(&handle);
+}
+
+
+
+void fb_disasm(const Binary &b)
+{
 }
 

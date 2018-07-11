@@ -280,8 +280,8 @@ std::list<Address> search_addr(const Binary &b)
     cs_free(insn, 1);
     cs_close(&handle);
 
-    l.sort(cmp_addr);
-    l.unique(equ_addr);
+    l.sort( [](Address a, Address b) { return (a.value < b.value); } );
+    l.unique( [](Address a, Address b) { return (a.value == b.value); });
 
     return l;
 }
@@ -318,8 +318,6 @@ static void print_addr_label(const Address &a)
         printf("\n\nproc_0x%lx:\n", a.value);
         break;
     case Address_type::Jump:
-        printf("\nL_0x%lx:\n", a.value);
-        break;
     case Address_type::JmpX:
         printf("\nL_0x%lx:\n", a.value);
         break;
@@ -394,11 +392,5 @@ void ls_disasm(const Binary &b)
 
     cs_free(insn, 1);
     cs_close(&handle);
-}
-
-
-
-void fb_disasm(const Binary &b)
-{
 }
 

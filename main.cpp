@@ -7,7 +7,7 @@
 #include <cstdio>
 
 
-static void disasm(Options o, Binary b);
+static void disasm(const Options& o, const Binary& b);
 
 
 int main(int argc, char *argv[])
@@ -55,7 +55,7 @@ static void print_addr_list(std::list<Address> l)
     }
 }
 
-static void disasm(Options o, Binary b)
+static void disasm(const Options& o, const Binary& b)
 {
     if (o.recursive) {
         std::list<Address> addr_list = search_addr(b);

@@ -18,16 +18,6 @@ struct Address {
 		: value(a), visited(b), type(t){}
 };
 
-inline bool equ_addr(Address a, Address b)
-{
-    return (a.value == b.value);
-}
-
-inline bool cmp_addr(Address a, Address b)
-{
-    return (a.value < b.value);
-}
-
 
 std::list<Address> search_addr(const Binary &b);
 

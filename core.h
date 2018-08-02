@@ -7,7 +7,7 @@
 #include "binary.h"
 
 
-enum class Address_type { Main, Call, Jump, JmpX };
+enum class Address_type { Nccf, Main, Call, Jump, JmpX };
 
 struct Address {
     uint64_t value;

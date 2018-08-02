@@ -231,6 +231,22 @@ uint64_t get_target_addr(cs_detail *d, size_t max_size)
     return 0;
 }
 
+Address_type get_address_type(csh handle, const cs_insn *insn)
+{
+    if (cs_insn_group(handle, insn, CS_GRP_CALL))
+        return Address_type::Call;
+
+    if (cs_insn_group(handle, insn, CS_GRP_JUMP)) {
+        if (insn->id == X86_INS_JMP)
+            return Address_type::Jump;
+        else
+            return Address_type::JmpX;
+    }
+
+    return Address_type::Nccf;
+}
+
+
 std::list<Address> search_addr(const Binary &b)
 {
     csh handle;
@@ -258,23 +274,14 @@ std::list<Address> search_addr(const Binary &b)
         if (addr > b.fsize)
             break;
 
-        if (cs_insn_group(handle, insn, CS_GRP_CALL))
-            if (get_target_addr(insn->detail, b.fsize) != 0) {
-                l.push_back(Address(insn->detail->x86.operands[0].imm, false, Address_type::Call));
-                continue;
-            }
+        Address_type type = get_address_type(handle, insn);
 
-        if (insn->id == X86_INS_JMP)
-            if (get_target_addr(insn->detail, b.fsize) != 0) {
-                l.push_back(Address(insn->detail->x86.operands[0].imm, false, Address_type::Jump));
-                continue;
+        if (type != Address_type::Nccf) {
+            uint64_t taddr = get_target_addr(insn->detail, b.fsize);
+            if (taddr != 0) {
+                l.push_back(Address(taddr, false, type));
             }
-
-        if (cs_insn_group(handle, insn, CS_GRP_JUMP) && insn->id != X86_INS_JMP)
-            if (get_target_addr(insn->detail, b.fsize) != 0) {
-                l.push_back(Address(insn->detail->x86.operands[0].imm, false, Address_type::JmpX));
-                continue;
-            }
+        }
     }
 
     cs_free(insn, 1);
@@ -320,6 +327,8 @@ static void print_addr_label(const Address &a)
     case Address_type::Jump:
     case Address_type::JmpX:
         printf("\nL_0x%lx:\n", a.value);
+        break;
+    default:
         break;
     }
 }

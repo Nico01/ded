@@ -51,6 +51,8 @@ static void print_addr_list(std::list<Address> l)
         case Address_type::JmpX:
             printf("0x%06lx: conditional branch address\t(visited: %s)\n", i.value, i.visited ? "true" : "false");
             break;
+        default:
+            break;
         }
     }
 }

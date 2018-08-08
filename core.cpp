@@ -222,16 +222,16 @@ static int print_insn_r(const cs_insn insn, const uint8_t r_ah)
     return 0;
 }
 
-uint64_t get_target_addr(cs_detail *d, size_t max_size)
+static uint64_t get_target_addr(cs_detail *d, size_t min_size, size_t max_size)
 {
     if (d->x86.op_count == 1 && d->x86.operands[0].type == X86_OP_IMM)
-        if ((uint64_t)d->x86.operands[0].imm < max_size)
+        if (((uint64_t)d->x86.operands[0].imm > min_size) && ((uint64_t)d->x86.operands[0].imm < max_size))
             return d->x86.operands[0].imm;
 
     return 0;
 }
 
-Address_type get_address_type(csh handle, const cs_insn *insn)
+static Address_type get_address_type(csh handle, const cs_insn *insn)
 {
     if (cs_insn_group(handle, insn, CS_GRP_CALL))
         return Address_type::Call;
@@ -270,7 +270,7 @@ static void search_addr(const Binary& b, uint64_t address, std::list<Address>& l
         Address_type type = get_address_type(handle, insn);
 
         if (type != Address_type::Nccf) {
-            uint64_t taddr = get_target_addr(insn->detail, b.fsize);
+            uint64_t taddr = get_target_addr(insn->detail, b.entry, b.fsize);
             if (taddr != 0) {
                 auto a = Address(taddr, false, type);
                 a.xref.push_back(XRef(insn->address, insn->id, std::string {cs_insn_name(handle, insn->id)}));
@@ -313,7 +313,7 @@ static void search_xref(const Binary& b, std::list<Address> & l)
             Address_type type = get_address_type(handle, insn);
 
             if (type != Address_type::Nccf) {
-                if (x.value == get_target_addr(insn->detail, b.fsize)) {
+                if (x.value == get_target_addr(insn->detail, b.entry, b.fsize)) {
                     if (x.xref.size() > 0) {
                         if (x.xref[0].address != insn->address) {
                             x.xref.push_back(XRef(insn->address, insn->id, std::string {cs_insn_name(handle, insn->id)}));

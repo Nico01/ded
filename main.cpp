@@ -24,9 +24,9 @@ int main(int argc, char *argv[])
 
     Binary bin(opts);
 
-    printf("File %s\t Size %zu (0x%zx) bytes\n\n", opts.filename.c_str(), bin.fsize, bin.fsize);
+    printf(";File %s\t Size %zu (0x%zx) bytes\n\n", opts.filename.c_str(), bin.fsize, bin.fsize);
 
-    printf("DEBUG: exe size %zu (0x%zx) bytes\n\n", bin.size, bin.size);
+    printf(";DEBUG: exe size %zu (0x%zx) bytes\n\n", bin.size, bin.size);
 
     disasm(opts, bin);
 
@@ -60,7 +60,7 @@ static void print_addr_list(std::list<Address> l)
 static void disasm(const Options& o, const Binary& b)
 {
     if (o.recursive) {
-        std::list<Address> addr_list = search_addr(b);
+        std::list<Address> addr_list = analyze(b);
 
         for (auto& i : addr_list)
             if ((i.type != Address_type::JmpX) && !i.visited)

@@ -246,8 +246,7 @@ Address_type get_address_type(csh handle, const cs_insn *insn)
     return Address_type::Nccf;
 }
 
-
-std::list<Address> search_addr(const Binary &b)
+static void search_addr(const Binary& b, uint64_t address, std::list<Address>& l)
 {
     csh handle;
 
@@ -259,19 +258,13 @@ std::list<Address> search_addr(const Binary &b)
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
     cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
 
-
-    std::list<Address> l;
-
-    l.push_back(Address(b.entry, false, Address_type::Main));
-
-    uint64_t addr = b.entry;
     size_t size = b.size;
-    const uint8_t *code = &b.data.at(addr);
+    const uint8_t *code = &b.data.at(address);
 
     cs_insn *insn = cs_malloc(handle);
 
-    while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-        if (addr > b.fsize)
+    while (cs_disasm_iter(handle, &code, &size, &address, insn)) {
+        if (address > b.fsize)
             break;
 
         Address_type type = get_address_type(handle, insn);
@@ -279,7 +272,9 @@ std::list<Address> search_addr(const Binary &b)
         if (type != Address_type::Nccf) {
             uint64_t taddr = get_target_addr(insn->detail, b.fsize);
             if (taddr != 0) {
-                l.push_back(Address(taddr, false, type));
+                auto a = Address(taddr, false, type);
+                a.xref.push_back(XRef(insn->address, insn->id, std::string {cs_insn_name(handle, insn->id)}));
+                l.push_back(Address(a));
             }
         }
     }
@@ -289,6 +284,65 @@ std::list<Address> search_addr(const Binary &b)
 
     l.sort( [](Address a, Address b) { return (a.value < b.value); } );
     l.unique( [](Address a, Address b) { return (a.value == b.value); });
+}
+
+static void search_xref(const Binary& b, std::list<Address> & l)
+{
+    csh handle;
+
+    if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
+        fprintf(stderr, "ERROR: Failed to initialize engine!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
+
+    cs_insn *insn = cs_malloc(handle);
+
+    for (auto& x : l) {
+
+        uint64_t addr = x.value;
+        size_t size = b.size;
+        const uint8_t *code = &b.data.at(addr);
+
+
+        while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
+            if (addr > b.fsize)
+                break;
+
+            Address_type type = get_address_type(handle, insn);
+
+            if (type != Address_type::Nccf) {
+                if (x.value == get_target_addr(insn->detail, b.fsize)) {
+                    if (x.xref.size() > 0) {
+                        if (x.xref[0].address != insn->address) {
+                            x.xref.push_back(XRef(insn->address, insn->id, std::string {cs_insn_name(handle, insn->id)}));
+                        }
+                    }
+                    else {
+                        x.xref.push_back(XRef(insn->address, insn->id, std::string {cs_insn_name(handle, insn->id)}));
+                    }
+                }
+            }
+        }
+    }
+    cs_free(insn, 1);
+    cs_close(&handle);
+}
+
+
+std::list<Address> analyze(const Binary& b)
+{
+    std::list<Address> l;
+
+    l.push_back(Address(b.entry, false, Address_type::Main));
+
+    search_addr(b, b.entry, l); // first pass
+
+    for (auto& x: l)
+        search_addr(b, x.value, l); // 2nd pass
+
+    search_xref(b, l);
 
     return l;
 }
@@ -303,6 +357,24 @@ static bool cmp_addr(const std::list<Address> &l, const uint64_t addr)
     return false;
 }
 
+static void xref_print(const Address &a, bool flag)
+{
+    if (flag) {
+        printf("\n\n; proc_0x%lx ~ ", a.value);
+        printf("xref: [ ");
+        for (auto& x: a.xref)
+            printf("'0x%lx, %s' ", x.address, x.istr.c_str());
+        printf("]\n");
+    } else {
+        printf("\n; L_0x%lx ~ ", a.value);
+        printf("xref: [ ");
+        for (auto& x: a.xref)
+            printf("'0x%lx, %s' ", x.address, x.istr.c_str());
+        printf("]\n");
+    }
+
+}
+
 static void check_jump(std::list<Address> &l, const uint64_t addr)
 {
     for (auto& i : l) {
@@ -310,23 +382,34 @@ static void check_jump(std::list<Address> &l, const uint64_t addr)
             if (i.value == addr)
                 if (!i.visited) {
                     i.visited = true;
-                    printf("\nL_0x%lx:\n", addr);
+                    xref_print(i, false);
                 }
     }
+}
+
+static bool jl(const Address &a)
+{
+    for (auto& x: a.xref)
+        if (x.insn_id == X86_INS_CALL)
+            return true;
+
+    return false;
 }
 
 static void print_addr_label(const Address &a)
 {
     switch (a.type) {
     case Address_type::Main:
-        printf(".start:\n");
+        printf("; .start:\n");
         break;
     case Address_type::Call:
-        printf("\n\nproc_0x%lx:\n", a.value);
+        xref_print(a, true);
         break;
     case Address_type::Jump:
+        xref_print(a, jl(a));
+        break;
     case Address_type::JmpX:
-        printf("\nL_0x%lx:\n", a.value);
+        xref_print(a, false);
         break;
     default:
         break;

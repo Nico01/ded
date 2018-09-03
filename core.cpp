@@ -167,23 +167,55 @@ static std::string get_opcodes_str(const cs_insn insn)
     return ss.str();
 }
 
-static uint8_t get_reg_ah(const cs_insn insn)
+void Registers::set_reg(const cs_insn insn)
 {
-    cs_detail *detail = insn.detail;
-    uint8_t reg_ah = 0xff;
+    if (insn.detail->x86.op_count == 2) {
+        if (insn.detail->x86.operands[0].type == X86_OP_REG && insn.detail->x86.operands[1].type == X86_OP_IMM) {
+            uint16_t value = insn.detail->x86.operands[1].imm;
 
-    if (detail->x86.op_count == 2) {
-        if (detail->x86.operands[0].type == X86_OP_REG && detail->x86.operands[1].type == X86_OP_IMM) {
-            if (detail->x86.operands[0].reg == X86_REG_AH)
-                reg_ah = detail->x86.operands[1].imm;
+            switch (insn.detail->x86.operands[0].reg) {
+            case X86_REG_AL:
+                this->al = value;
+                break;
+            case X86_REG_AH:
+                this->ah = value;
+                break;
+            case X86_REG_AX:
+                this->ax = value;
+                break;
+            case X86_REG_BL:
+                this->bl = value;
+                break;
+            case X86_REG_BH:
+                this->bh = value;
+                break;
+            case X86_REG_BX:
+                this->bx = value;
+                break;
+            case X86_REG_CL:
+                this->cl = value;
+                break;
+            case X86_REG_CH:
+                this->ch = value;
+                break;
+            case X86_REG_CX:
+                this->cx = value;
+                break;
+            case X86_REG_DL:
+                this->dl = value;
+                break;
+            case X86_REG_DH:
+                this->dh = value;
+                break;
+            case X86_REG_DX:
+                this->dx = value;
+                break;
+            default:
+                break;
 
-            if (detail->x86.operands[0].reg == X86_REG_AX)
-                reg_ah = detail->x86.operands[1].imm >> 8;
-
-            return reg_ah;
+            }
         }
     }
-    return reg_ah;
 }
 
 static void print_insn(const cs_insn insn)
@@ -282,10 +314,10 @@ static bool check_address(std::map<uint64_t, Analyzer::Address>& l, const uint64
 
 uint64_t rt_disasm(const Binary& b, Disasm::Disassembler& d, Analyzer::Address& a, std::map<uint64_t, Analyzer::Address>& addr_list)
 {
-    uint8_t r_ah = 0xff;
     a.visited = true;
 
     static Gap g;
+    static Registers reg;
 
     uint64_t addr = a.value;
     size_t size = b.size;
@@ -301,12 +333,11 @@ uint64_t rt_disasm(const Binary& b, Disasm::Disassembler& d, Analyzer::Address& 
     print_addr_label(a);
 
     while (cs_disasm_iter(d.handle, &code, &size, &addr, insn)) {
-        if (get_reg_ah(*insn) != 0xff)
-            r_ah = get_reg_ah(*insn);
+        reg.set_reg(*insn);
 
         g.last_addr = addr;
 
-        if (print_insn_r(*insn, r_ah))
+        if (print_insn_r(*insn, reg.ah))
             break;
 
         if (check_address(addr_list, addr, CA_Mode::Uncond) || cs_insn_group(d.handle, insn, CS_GRP_RET) ||

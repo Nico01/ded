@@ -1,5 +1,5 @@
-#ifndef _DED_DISASM_H
-#define _DED_DISASM_H
+#ifndef DED_DISASM_H
+#define DED_DISASM_H
 
 #include <cstdint>
 #include <string>
@@ -38,4 +38,4 @@ struct Disassembler {
 
 } // Disasm
 
-#endif // _DED_DISASM_H
+#endif // DED_DISASM_H

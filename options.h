@@ -1,5 +1,5 @@
-#ifndef _DED_OPTIONS_H_
-#define _DED_OPTIONS_H_
+#ifndef DED_OPTIONS_H
+#define DED_OPTIONS_H
 
 #include <string>
 #include <cstdint>
@@ -22,4 +22,4 @@ void usage(std::string s);
 
 
 
-#endif //_DED_OPTIONS_H_
+#endif // DED_OPTIONS_H

@@ -1,5 +1,5 @@
-#ifndef _DED_BINARY_H_
-#define _DED_BINARY_H_
+#ifndef DED_BINARY_H
+#define DED_BINARY_H
 
 #include <string>
 #include <vector>
@@ -61,4 +61,4 @@ private:
 };
 
 
-#endif //_DED_BINARY_H_
+#endif // DED_BINARY_H

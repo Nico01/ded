@@ -40,9 +40,14 @@ Binary::Binary(const Options &o)
             exit(EXIT_FAILURE);
         }
 
+        if (Header.num_relocs)
+            relocate(f);
+
         if (o.hdr)
             disp_header();
     }
+
+    type = (o.mz ? Bin_type::Exe : Bin_type::Com);
 
     set_entry(o);
     set_exe_size(o);
@@ -83,19 +88,51 @@ void Binary::set_exe_size(const Options &o)
     }
 }
 
+void Binary::relocate(std::ifstream& f)
+{
+    size_t rsize = Header.num_relocs * sizeof(Relocation);
+
+    Relocation *reloc = new Relocation[rsize];
+
+    f.seekg (Header.reloc_table_offset, f.beg);
+    f.read(reinterpret_cast<char*>(reloc), rsize);
+
+    for (int i = 0; i < Header.num_relocs; ++i)
+        Reloc.push_back(reloc[i]);
+
+    for (auto& x : Reloc)
+        RelocationTable.push_back((x.segment << 4) + x.offset);
+
+    delete[] reloc;
+}
+
 void Binary::disp_header() const
 {
-    printf("DOS Header:\n");
-    printf("Magic number                    0x%x\n", Header.signature);
-    printf("Bytes in last pages             0x%x\n", Header.bytes_in_last_block);
-    printf("Pages in file                   0x%x\n", Header.blocks_in_file);
-    printf("Relocations                     0x%x\n", Header.num_relocs);
-    printf("Size of header                  0x%x\n", Header.header_paragraphs);
-    printf("Minimum extra paragraphs        0x%x\n", Header.min_extra_paragraphs);
-    printf("Maximum extra paragraphs        0x%x\n", Header.max_extra_paragraphs);
-    printf("Initial ss:sp                   0x%x:0x%x\n", Header.ss, Header.sp);
-    printf("Checksum                        0x%x\n", Header.checksum);
-    printf("Initial cs:ip                   0x%x:0x%x\n", Header.cs, Header.ip);
-    printf("Address of relocation table     0x%x\n", Header.reloc_table_offset);
-    printf("Overlay number                  0x%x\n\n", Header.overlay_number);
+    fprintf(stderr, "DOS Header:\n");
+    fprintf(stderr, "Magic number                    0x%x\n", Header.signature);
+    fprintf(stderr, "Bytes in last pages             0x%x\n", Header.bytes_in_last_block);
+    fprintf(stderr, "Pages in file                   0x%x\n", Header.blocks_in_file);
+    fprintf(stderr, "Relocations                     0x%x\n", Header.num_relocs);
+    fprintf(stderr, "Size of header                  0x%x\n", Header.header_paragraphs);
+    fprintf(stderr, "Minimum extra paragraphs        0x%x\n", Header.min_extra_paragraphs);
+    fprintf(stderr, "Maximum extra paragraphs        0x%x\n", Header.max_extra_paragraphs);
+    fprintf(stderr, "Initial ss:sp                   0x%x:0x%x\n", Header.ss, Header.sp);
+    fprintf(stderr, "Checksum                        0x%x\n", Header.checksum);
+    fprintf(stderr, "Initial cs:ip                   0x%x:0x%x\n", Header.cs, Header.ip);
+    fprintf(stderr, "Address of relocation table     0x%x\n", Header.reloc_table_offset);
+    fprintf(stderr, "Overlay number                  0x%x\n\n", Header.overlay_number);
+
+    if (Header.num_relocs) {
+        fprintf(stderr, "Relocations table:\n");
+        fprintf(stderr, "\toffset:segment\n");
+
+        for (auto& x : Reloc)
+            fprintf(stderr, "\t0x%04x:0x%04x\n", x.offset, x.segment);
+
+        fprintf(stderr, "Relocated address:\n");
+        for (auto& x : RelocationTable)
+            fprintf(stderr, "\t0x%06x\n", x);
+
+        fprintf(stderr, "_________________________________________\n\n");
+    }
 }

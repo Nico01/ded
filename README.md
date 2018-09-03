@@ -18,4 +18,6 @@ Note:
 ```
 
 
-Requires: [Capstone Engine](http://www.capstone-engine.org) >= 3.0
+#### Dependencies
+* [Capstone Engine](http://www.capstone-engine.org) >= 4.0~
+* [fmtlib](https://github.com/fmtlib/fmt)

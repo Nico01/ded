@@ -1,3 +1,4 @@
+#include <map>
 #include <list>
 #include <cstring>
 #include <cstdlib>
@@ -6,7 +7,10 @@
 #include <capstone/capstone.h>
 #include <cinttypes>
 
+#include <fmt/printf.h>
+
 #include "core.h"
+#include "utils.h"
 
 const char *int21h[] = {
     "Terminate process",                            // 0x00
@@ -189,287 +193,135 @@ static void print_insn(const cs_insn insn)
     printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic, insn.op_str);
 }
 
-static int print_insn_r(const cs_insn insn, const uint8_t r_ah)
+static bool print_insn_r(const cs_insn insn, const uint8_t r_ah)
 {
-    cs_detail *detail = insn.detail;
-    std::string opcodes = get_opcodes_str(insn);
+    auto f = [&i = insn](const std::string s)
+    {
+        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s %s", i.address, get_opcodes_str(i).c_str(), i.mnemonic, i.op_str, s.c_str());
+    };
 
     if (insn.id == X86_INS_INT) {
-        switch (detail->x86.operands[0].imm) {
+        switch (insn.detail->x86.operands[0].imm) {
         case 0x21:
-            if (r_ah != 0xff) {
-                printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; %s\n", insn.address, opcodes.c_str(), insn.mnemonic,
-                       insn.op_str, int21h[r_ah]);
-
-                if (r_ah == 0x4c) {
-                    printf("========\n");
-                    return 1;
-                }
-            }
-            break;
-        case 0x20:
-            printf("0x%06" PRIx64 ":\t %-20s\t%s  %s ; exit()\n", insn.address, opcodes.c_str(), insn.mnemonic,
-                   insn.op_str);
-            printf("========\n");
-            return 1;
-        default:
-            printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic, insn.op_str);
-        }
-    } else {
-        printf("0x%06" PRIx64 ":\t %-20s\t%s  %s\n", insn.address, opcodes.c_str(), insn.mnemonic, insn.op_str);
-    }
-
-    return 0;
-}
-
-static uint64_t get_target_addr(cs_detail *d, size_t min_size, size_t max_size)
-{
-    if (d->x86.op_count == 1 && d->x86.operands[0].type == X86_OP_IMM)
-        if (((uint64_t)d->x86.operands[0].imm > min_size) && ((uint64_t)d->x86.operands[0].imm < max_size))
-            return d->x86.operands[0].imm;
-
-    return 0;
-}
-
-static Address_type get_address_type(csh handle, const cs_insn *insn)
-{
-    if (cs_insn_group(handle, insn, CS_GRP_CALL))
-        return Address_type::Call;
-
-    if (cs_insn_group(handle, insn, CS_GRP_JUMP)) {
-        if (insn->id == X86_INS_JMP)
-            return Address_type::Jump;
-        else
-            return Address_type::JmpX;
-    }
-
-    return Address_type::Nccf;
-}
-
-static void search_addr(const Binary& b, uint64_t address, std::list<Address>& l)
-{
-    csh handle;
-
-    if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
-        fprintf(stderr, "ERROR: Failed to initialize engine!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
-    cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
-
-    size_t size = b.size;
-    const uint8_t *code = &b.data.at(address);
-
-    cs_insn *insn = cs_malloc(handle);
-
-    while (cs_disasm_iter(handle, &code, &size, &address, insn)) {
-        if (address > b.fsize)
-            break;
-
-        Address_type type = get_address_type(handle, insn);
-
-        if (type != Address_type::Nccf) {
-            uint64_t taddr = get_target_addr(insn->detail, b.entry, b.fsize);
-            if (taddr != 0) {
-                auto a = Address(taddr, false, type);
-                a.xref.push_back(XRef(insn->address, insn->id, std::string {cs_insn_name(handle, insn->id)}));
-                l.push_back(Address(a));
-            }
-        }
-    }
-
-    cs_free(insn, 1);
-    cs_close(&handle);
-
-    l.sort( [](Address a, Address b) { return (a.value < b.value); } );
-    l.unique( [](Address a, Address b) { return (a.value == b.value); });
-}
-
-static void search_xref(const Binary& b, std::list<Address> & l)
-{
-    csh handle;
-
-    if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
-        fprintf(stderr, "ERROR: Failed to initialize engine!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
-
-    cs_insn *insn = cs_malloc(handle);
-
-    for (auto& x : l) {
-
-        uint64_t addr = x.value;
-        size_t size = b.size;
-        const uint8_t *code = &b.data.at(addr);
-
-
-        while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
-            if (addr > b.fsize)
-                break;
-
-            Address_type type = get_address_type(handle, insn);
-
-            if (type != Address_type::Nccf) {
-                if (x.value == get_target_addr(insn->detail, b.entry, b.fsize)) {
-                    if (x.xref.size() > 0) {
-                        if (x.xref[0].address != insn->address) {
-                            x.xref.push_back(XRef(insn->address, insn->id, std::string {cs_insn_name(handle, insn->id)}));
-                        }
-                    }
-                    else {
-                        x.xref.push_back(XRef(insn->address, insn->id, std::string {cs_insn_name(handle, insn->id)}));
-                    }
-                }
-            }
-        }
-    }
-    cs_free(insn, 1);
-    cs_close(&handle);
-}
-
-
-std::list<Address> analyze(const Binary& b)
-{
-    std::list<Address> l;
-
-    l.push_back(Address(b.entry, false, Address_type::Main));
-
-    search_addr(b, b.entry, l); // first pass
-
-    for (auto& x: l)
-        search_addr(b, x.value, l); // 2nd pass
-
-    search_xref(b, l);
-
-    return l;
-}
-
-static bool cmp_addr(const std::list<Address> &l, const uint64_t addr)
-{
-    for (const auto& i : l) {
-        if (i.type == Address_type::Call || i.type == Address_type::Jump)
-            if (i.value == addr)
+            switch (r_ah) {
+            case 0xff:
+                f("\n");
+                return false;
+            case 0x4c:
+                f(fmt::sprintf("; %s\n========\n", int21h[r_ah]));
                 return true;
-    }
-    return false;
-}
-
-static void xref_print(const Address &a, bool flag)
-{
-    if (flag) {
-        printf("\n\n; proc_0x%lx ~ ", a.value);
-        printf("xref: [ ");
-        for (auto& x: a.xref)
-            printf("'0x%lx, %s' ", x.address, x.istr.c_str());
-        printf("]\n");
-    } else {
-        printf("\n; L_0x%lx ~ ", a.value);
-        printf("xref: [ ");
-        for (auto& x: a.xref)
-            printf("'0x%lx, %s' ", x.address, x.istr.c_str());
-        printf("]\n");
-    }
-
-}
-
-static void check_jump(std::list<Address> &l, const uint64_t addr)
-{
-    for (auto& i : l) {
-        if (i.type == Address_type::JmpX)
-            if (i.value == addr)
-                if (!i.visited) {
-                    i.visited = true;
-                    xref_print(i, false);
-                }
-    }
-}
-
-static bool jl(const Address &a)
-{
-    for (auto& x: a.xref)
-        if (x.insn_id == X86_INS_CALL)
+            default:
+                f(fmt::sprintf("; %s\n", int21h[r_ah]));
+                return false;
+            }
+        case 0x20:
+            f("; exit()\n========\n");
             return true;
+        default:
+            f("\n");
+            return false;
+        }
+    }
 
+    f("\n");
     return false;
 }
 
-static void print_addr_label(const Address &a)
+static void print_addr_label(const Analyzer::Address &a)
 {
+    auto f = [&z = a]()
+    {
+        printf("xref: [ ");
+        for (auto& x: z.xref)
+            printf("'0x%lx, %s' ", x.address, x.istr.c_str());
+        printf("]\n");
+    };
+
     switch (a.type) {
-    case Address_type::Main:
+    case Analyzer::Address_type::Start:
         printf("; .start:\n");
         break;
-    case Address_type::Call:
-        xref_print(a, true);
+    case Analyzer::Address_type::Call:
+        printf("\n\n; sub_0x%06lx ~ ", a.value);
+        f();
         break;
-    case Address_type::Jump:
-        xref_print(a, jl(a));
-        break;
-    case Address_type::JmpX:
-        xref_print(a, false);
+    case Analyzer::Address_type::Jump:
+    case Analyzer::Address_type::JmpX:
+        printf("\n; loc_0x%06lx ~ ", a.value);
+        f();
         break;
     default:
         break;
     }
 }
 
-void rt_disasm(const Binary &b, Address &a, std::list<Address> &addr_list)
-{
-    csh handle = 0;
 
+enum class CA_Mode { Uncond, Cond };
+
+static bool check_address(std::map<uint64_t, Analyzer::Address>& l, const uint64_t addr, CA_Mode m)
+{
+    auto it = l.find(addr);
+
+    if (it != l.end()) {
+        switch (m) {
+        case CA_Mode::Uncond:
+            if (it->second.type == Analyzer::Address_type::Call || it->second.type == Analyzer::Address_type::Jump)
+                if (it->second.value == addr)
+                    return true;
+            return false;
+        case CA_Mode::Cond:
+            if (it->second.type == Analyzer::Address_type::JmpX && !it->second.visited) {
+                it->second.visited = true;
+                print_addr_label(it->second);
+            }
+        }
+    }
+
+    return false;
+}
+
+uint64_t rt_disasm(const Binary& b, Disasm::Disassembler& d, Analyzer::Address& a, std::map<uint64_t, Analyzer::Address>& addr_list)
+{
     uint8_t r_ah = 0xff;
     a.visited = true;
 
-    if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
-        fprintf(stderr, "ERROR: Failed to initialize engine!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
-    cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
-    cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
+    static Gap g;
 
     uint64_t addr = a.value;
     size_t size = b.size;
     const uint8_t *code = &b.data.at(addr);
 
-    cs_insn *insn = cs_malloc(handle);
+    cs_insn *insn = cs_malloc(d.handle);
+
+    g.next_addr = a.value;
+
+    g.fill_gap(b);
+    //fprintf(stderr, "DEBUG: g.next_addr 0x%06lx, g.last_addr 0x%06lx, gap size %zu\n", g.next_addr, g.last_addr, g.next_addr - g.last_addr);
 
     print_addr_label(a);
 
-    while (cs_disasm_iter(handle, &code, &size, &addr, insn)) {
+    while (cs_disasm_iter(d.handle, &code, &size, &addr, insn)) {
         if (get_reg_ah(*insn) != 0xff)
             r_ah = get_reg_ah(*insn);
+
+        g.last_addr = addr;
 
         if (print_insn_r(*insn, r_ah))
             break;
 
-        if (cmp_addr(addr_list, addr) || cs_insn_group(handle, insn, CS_GRP_RET) ||
-            cs_insn_group(handle, insn, CS_GRP_IRET) || addr >= b.fsize)
+        if (check_address(addr_list, addr, CA_Mode::Uncond) || cs_insn_group(d.handle, insn, CS_GRP_RET) ||
+            cs_insn_group(d.handle, insn, CS_GRP_IRET) || addr >= b.fsize)
                 break;
 
-        check_jump(addr_list, addr);
+        check_address(addr_list, addr, CA_Mode::Cond);
     }
-
     cs_free(insn, 1);
-    cs_close(&handle);
+
+    return g.last_addr;
 }
 
-void ls_disasm(const Binary &b)
+void ls_disasm(const Binary& b, Disasm::Disassembler& d)
 {
-    csh handle = 0;
-
-    if (cs_open(CS_ARCH_X86, CS_MODE_16, &handle) != CS_ERR_OK) {
-        fprintf(stderr, "ERROR: Failed to initialize engine!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
-    cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
-
     printf(".start:\n");
 
 
@@ -477,12 +329,12 @@ void ls_disasm(const Binary &b)
     size_t size = b.size;
     const uint8_t *code = &b.data.at(addr);
 
-    cs_insn *insn = cs_malloc(handle);
+    cs_insn *insn = cs_malloc(d.handle);
 
-    while (cs_disasm_iter(handle, &code, &size, &addr, insn))
+    while (cs_disasm_iter(d.handle, &code, &size, &addr, insn)) {
         print_insn(*insn);
+    }
 
     cs_free(insn, 1);
-    cs_close(&handle);
 }
 

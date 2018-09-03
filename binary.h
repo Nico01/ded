@@ -7,15 +7,29 @@
 
 #include "options.h"
 
+struct Relocation {
+    uint16_t offset;
+    uint16_t segment;
+};
+
+enum class Bin_type {
+    Com,
+    Exe,
+};
 
 class Binary {
 public:
+    Bin_type type;
     std::vector<uint8_t> data;
     size_t fsize;
     size_t size;
     uint64_t entry;
 
     Binary(const Options &o);
+
+    int get_paragraphs() const {
+        return Header.header_paragraphs;
+    }
 
 private:
     const uint16_t MZ_Signature = 0x5A4D;
@@ -37,15 +51,12 @@ private:
         uint16_t overlay_number;
     } Header;
 
-/*
-    struct {
-        uint16_t offset;
-        uint16_t segment;
-    } Reloc;
-*/
+    std::vector<Relocation> Reloc;
+    std::vector<uint32_t> RelocationTable;
 
     void set_entry(const Options &o);
     void set_exe_size(const Options &o);
+    void relocate(std::ifstream& f);
     void disp_header() const;
 };
 

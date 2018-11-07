@@ -3,7 +3,9 @@
 
 #include <cstdio>
 #include <cctype>
+#include <map>
 
+#include "analyzer.h"
 #include "binary.h"
 
 struct Gap {
@@ -13,5 +15,7 @@ struct Gap {
     Gap() : next_addr(0), last_addr(0) {}
     void fill_gap(const Binary& b);
 };
+
+void print_addr_list(const std::map<uint64_t, Analyzer::Address>& l, uint64_t last_vaddr);
 
 #endif // DED_UTILS_H

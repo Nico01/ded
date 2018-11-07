@@ -7,9 +7,11 @@
 #include "analyzer.h"
 #include "disassembler.h"
 
+/*
 enum class Reg_name {
     AL, AH, AX, BL, BH, BX, CL, CH, CX, DL, DH, DX, SP, BP, SI, DI, ES, CS, SS, DS
 };
+*/
 
 struct Registers {
     union { struct { uint8_t al; uint8_t ah; }; uint16_t ax; };

@@ -21,7 +21,6 @@ struct Instruction {
 
     Instruction(cs_insn insn);
     void print();
-    bool print_r(const uint8_t reg_ah);
     bool change_cf();
     uint64_t get_target_addr();
     std::tuple<uint8_t, bool> get_reg_ah();

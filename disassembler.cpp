@@ -18,14 +18,19 @@ Disasm::Disassembler::Disassembler()
         exit(EXIT_FAILURE);
     }
 
-    cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
-    cs_option(handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
-    cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
+    cs_option(this->handle, CS_OPT_DETAIL, CS_OPT_ON);
+    cs_option(this->handle, CS_OPT_SKIPDATA, CS_OPT_ON);
+    cs_option(this->handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_INTEL);
 }
 
 Disasm::Disassembler::~Disassembler()
 {
     cs_close(&this->handle);
+}
+
+void Disasm::Disassembler::set_syntax(cs_opt_value syntax)
+{
+    cs_option(this->handle, CS_OPT_SYNTAX, syntax);
 }
 
 static std::string get_opcodes_str(const cs_insn insn)

@@ -9,7 +9,8 @@ Options:
     -h    if -e display the DOS MZ header
     -r    disassemble file using recursive traversal algorithm (experimental)
     -v    verbose mode: if -r display the list of addresses found
-    -s    specifies an entry point
+    -e    specifies an entry point
+    -s    specifies instructions syntax (att, intel, masm) - default is 'intel'
     -f    input file
 
 Note:
@@ -19,5 +20,5 @@ Note:
 
 
 #### Dependencies
-* [Capstone Engine](http://www.capstone-engine.org) >= 4.0~
+* [Capstone Engine](http://www.capstone-engine.org) >= 4.0
 * [fmtlib](https://github.com/fmtlib/fmt)

@@ -5,7 +5,7 @@ Options::Options(int argc, char *argv[])
 {
     int c;
 
-    while ((c = getopt(argc, argv, "Hmhrvs:f:")) != -1) {
+    while ((c = getopt(argc, argv, "Hmhrve:s:f:")) != -1) {
         switch (c) {
         case 'H':
             usage(argv[0]);
@@ -22,9 +22,13 @@ Options::Options(int argc, char *argv[])
         case 'v':
             verbose = true;
             break;
-        case 's':
+        case 'e':
             entry = true;
             ep = strtol(optarg, NULL, 16);
+            break;
+        case 's':
+            syntax = true;
+            syntaxt = std::string {optarg};
             break;
         case 'f':
             filename = std::string {optarg};
@@ -45,7 +49,8 @@ void usage(std::string s)
             "\n\t-h    if -m display the DOS MZ header\n"
             "\n\t-r    disassemble file using recursive traversal algorithm (experimental)\n"
             "\n\t-v    verbose mode: if -r display the list of addresses found\n"
-            "\n\t-s    specifies an entry point\n\n"
+            "\n\t-e    specifies an entry point\n\n"
+            "\n\t-s    specifies instructions syntax (att, intel, masm) - default is 'intel'\n\n"
             "\n\t-f    input file\n\n"
             "\n\tNote:"
             "\n\tif no flags are given the input file is treated as a headerless 16 bits\n"

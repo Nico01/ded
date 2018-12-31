@@ -33,6 +33,8 @@ struct Disassembler {
 
     Disassembler();
     ~Disassembler();
+
+    void set_syntax(cs_opt_value syntax);
 };
 
 } // Disasm

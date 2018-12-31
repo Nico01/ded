@@ -7,11 +7,13 @@
 
 struct Options {
     std::string filename {};
+    std::string syntaxt {};
     bool mz = false;
     bool recursive = false;
     bool hdr = false;
     bool verbose = false;
     bool entry = false;
+    bool syntax = false;
     uint64_t ep = 0;
 
     Options(int argc, char *argv[]);

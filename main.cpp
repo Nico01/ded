@@ -8,9 +8,25 @@
 #include "utils.h"
 
 
+static cs_opt_value str_to_opt(std::string s)
+{
+    if (s == "intel")
+        return CS_OPT_SYNTAX_INTEL;
+    else if (s == "att")
+        return CS_OPT_SYNTAX_ATT;
+    else if (s == "masm")
+        return CS_OPT_SYNTAX_MASM;
+    else
+        return CS_OPT_SYNTAX_INTEL;
+}
+
 static void disasm(const Options& o, const Binary& b)
 {
     Disasm::Disassembler d;
+
+    if (o.syntax)
+        d.set_syntax(str_to_opt(o.syntaxt));
+
     Gap g;
 
     if (o.recursive) {

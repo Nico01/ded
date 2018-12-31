@@ -1,10 +1,10 @@
 CXX = g++
-CXXFLAGS = -Wall -Wextra -ggdb3 -std=c++17
+CXXFLAGS = -Wall -Wextra -ggdb3 -std=c++17 -O3
 LDFLAGS = -lcapstone -lfmt
 
 all: ded
 
-ded: main.o core.o options.o binary.o analyzer.o disassembler.o utils.o
+ded: main.o core.o options.o binary.o analyzer.o disassembler.o utils.o insnfmt.o
 	${CXX} ${CXXFLAGS} $^ -o $@ ${LDFLAGS}
 
 %.o: %.cpp
